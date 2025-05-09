@@ -29,7 +29,13 @@ use crate::{new_error, Result};
 #[derive(Default, Clone)]
 /// A Wrapper around details of functions exposed by the Host
 pub struct HostFuncsWrapper {
-    functions_map: HashMap<String, (HyperlightFunction, Option<Vec<ExtraAllowedSyscall>>)>,
+    functions_map: HashMap<String, FunctionEntry>,
+}
+
+#[derive(Clone)]
+pub struct FunctionEntry {
+    pub function: HyperlightFunction,
+    pub extra_allowed_syscalls: Option<Vec<ExtraAllowedSyscall>>,
 }
 
 impl HostFuncsWrapper {
@@ -86,7 +92,7 @@ impl HostFuncsWrapper {
     fn register_host_function_helper(
         &mut self,
         name: String,
-        func: HyperlightFunction,
+        function: HyperlightFunction,
         extra_allowed_syscalls: Option<Vec<ExtraAllowedSyscall>>,
     ) -> Result<()> {
         #[cfg(not(all(feature = "seccomp", target_os = "linux")))]
@@ -95,8 +101,13 @@ impl HostFuncsWrapper {
                 "Extra syscalls are only supported on Linux with seccomp"
             ));
         }
-        self.functions_map
-            .insert(name, (func, extra_allowed_syscalls));
+        self.functions_map.insert(
+            name,
+            FunctionEntry {
+                function,
+                extra_allowed_syscalls,
+            },
+        );
         Ok(())
     }
 
