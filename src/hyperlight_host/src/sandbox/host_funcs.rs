@@ -28,7 +28,7 @@ use crate::{new_error, Result};
 
 #[derive(Default, Clone)]
 /// A Wrapper around details of functions exposed by the Host
-pub struct HostFuncsWrapper {
+pub struct FunctionRegistry {
     functions_map: HashMap<String, FunctionEntry>,
 }
 
@@ -38,7 +38,7 @@ pub struct FunctionEntry {
     pub extra_allowed_syscalls: Option<Vec<ExtraAllowedSyscall>>,
 }
 
-impl HostFuncsWrapper {
+impl FunctionRegistry {
     /// Register a host function with the sandbox.
     #[instrument(err(Debug), skip_all, parent = Span::current(), level = "Trace")]
     pub(crate) fn register_host_function(
