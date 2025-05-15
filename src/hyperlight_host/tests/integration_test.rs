@@ -31,7 +31,7 @@ use crate::common::{new_uninit, new_uninit_rust};
 fn print_four_args_c_guest() {
     let path = c_simple_guest_as_string().unwrap();
     let guest_path = GuestBinary::FilePath(path);
-    let uninit = UninitializedSandbox::new(guest_path, None, None);
+    let uninit = UninitializedSandbox::new(guest_path, None);
     let mut sbox1 = uninit.unwrap().evolve(Noop::default()).unwrap();
 
     let res = sbox1.call_guest_function_by_name::<i32>(
@@ -124,7 +124,7 @@ fn guest_abort_with_context2() {
 fn guest_abort_c_guest() {
     let path = c_simple_guest_as_string().unwrap();
     let guest_path = GuestBinary::FilePath(path);
-    let uninit = UninitializedSandbox::new(guest_path, None, None);
+    let uninit = UninitializedSandbox::new(guest_path, None);
     let mut sbox1 = uninit.unwrap().evolve(Noop::default()).unwrap();
 
     let res = sbox1
@@ -205,7 +205,6 @@ fn guest_malloc_abort() {
     let uninit = UninitializedSandbox::new(
         GuestBinary::FilePath(simple_guest_as_string().unwrap()),
         Some(cfg),
-        None,
     )
     .unwrap();
     let mut sbox2 = uninit.evolve(Noop::default()).unwrap();
@@ -227,7 +226,7 @@ fn guest_malloc_abort() {
 fn dynamic_stack_allocate_c_guest() {
     let path = c_simple_guest_as_string().unwrap();
     let guest_path = GuestBinary::FilePath(path);
-    let uninit = UninitializedSandbox::new(guest_path, None, None);
+    let uninit = UninitializedSandbox::new(guest_path, None);
     let mut sbox1: MultiUseSandbox = uninit.unwrap().evolve(Noop::default()).unwrap();
 
     let res: i32 = sbox1

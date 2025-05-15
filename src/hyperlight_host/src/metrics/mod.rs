@@ -109,7 +109,6 @@ mod tests {
             let uninit = UninitializedSandbox::new(
                 GuestBinary::FilePath(simple_guest_as_string().unwrap()),
                 None,
-                None,
             )
             .unwrap();
 

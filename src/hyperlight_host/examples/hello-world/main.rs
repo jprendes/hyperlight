@@ -27,7 +27,6 @@ fn main() -> hyperlight_host::Result<()> {
             hyperlight_testing::simple_guest_as_string().unwrap(),
         ),
         None, // default configuration
-        None, // default run options
     )?;
 
     // Register a host functions
