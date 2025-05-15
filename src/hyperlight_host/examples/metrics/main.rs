@@ -17,7 +17,6 @@ limitations under the License.
 extern crate hyperlight_host;
 use std::thread::{spawn, JoinHandle};
 
-use hyperlight_common::flatbuffer_wrappers::function_types::{ParameterValue, ReturnType};
 use hyperlight_host::sandbox::uninitialized::UninitializedSandbox;
 use hyperlight_host::sandbox_state::sandbox::EvolvableSandbox;
 use hyperlight_host::sandbox_state::transition::Noop;
@@ -54,7 +53,7 @@ fn do_hyperlight_stuff() {
         let path = hyperlight_guest_path.clone();
         let handle = spawn(move || -> Result<()> {
             // Create a new sandbox.
-            let mut usandbox = UninitializedSandbox::new(GuestBinary::FilePath(path), None, None)?;
+            let mut usandbox = UninitializedSandbox::new(GuestBinary::FilePath(path), None)?;
             usandbox.register_print(fn_writer)?;
 
             // Initialize the sandbox.
@@ -65,12 +64,9 @@ fn do_hyperlight_stuff() {
 
             // Call a guest function 5 times to generate some metrics.
             for _ in 0..5 {
-                let result = multiuse_sandbox.call_guest_function_by_name(
-                    "Echo",
-                    ReturnType::String,
-                    Some(vec![ParameterValue::String("a".to_string())]),
-                );
-                assert!(result.is_ok());
+                multiuse_sandbox
+                    .call_guest_function_by_name::<String>("Echo", "a".to_string())
+                    .unwrap();
             }
 
             // Define a message to send to the guest.
@@ -79,12 +75,9 @@ fn do_hyperlight_stuff() {
 
             // Call a guest function that calls the HostPrint host function 5 times to generate some metrics.
             for _ in 0..5 {
-                let result = multiuse_sandbox.call_guest_function_by_name(
-                    "PrintOutput",
-                    ReturnType::Int,
-                    Some(vec![ParameterValue::String(msg.clone())]),
-                );
-                assert!(result.is_ok());
+                multiuse_sandbox
+                    .call_guest_function_by_name::<i32>("PrintOutput", msg.clone())
+                    .unwrap();
             }
             Ok(())
         });
@@ -93,12 +86,9 @@ fn do_hyperlight_stuff() {
     }
 
     // Create a new sandbox.
-    let usandbox = UninitializedSandbox::new(
-        GuestBinary::FilePath(hyperlight_guest_path.clone()),
-        None,
-        None,
-    )
-    .expect("Failed to create UninitializedSandbox");
+    let usandbox =
+        UninitializedSandbox::new(GuestBinary::FilePath(hyperlight_guest_path.clone()), None)
+            .expect("Failed to create UninitializedSandbox");
 
     // Initialize the sandbox.
 
@@ -111,11 +101,8 @@ fn do_hyperlight_stuff() {
     for _ in 0..5 {
         let mut ctx = multiuse_sandbox.new_call_context();
 
-        let result = ctx.call("Spin", ReturnType::Void, None);
-        assert!(result.is_err());
-        let result = ctx.finish();
-        assert!(result.is_ok());
-        multiuse_sandbox = result.unwrap();
+        ctx.call::<()>("Spin", ()).unwrap_err();
+        multiuse_sandbox = ctx.finish().unwrap();
     }
 
     for join_handle in join_handles {

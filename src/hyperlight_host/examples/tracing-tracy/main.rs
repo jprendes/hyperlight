@@ -14,7 +14,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 #![allow(clippy::disallowed_macros)]
-use hyperlight_host::func::{ParameterValue, ReturnType, ReturnValue};
 use hyperlight_host::sandbox::uninitialized::UninitializedSandbox;
 use hyperlight_host::sandbox_state::sandbox::EvolvableSandbox;
 use hyperlight_host::sandbox_state::transition::Noop;
@@ -39,7 +38,7 @@ fn main() -> Result<()> {
         simple_guest_as_string().expect("Cannot find the guest binary at the expected location.");
 
     // Create a new sandbox.
-    let usandbox = UninitializedSandbox::new(GuestBinary::FilePath(simple_guest_path), None, None)?;
+    let usandbox = UninitializedSandbox::new(GuestBinary::FilePath(simple_guest_path), None)?;
 
     let mut sbox = usandbox
         .evolve(Noop::<UninitializedSandbox, MultiUseSandbox>::default())
@@ -47,13 +46,9 @@ fn main() -> Result<()> {
 
     // do the function call
     let current_time = std::time::Instant::now();
-    let res = sbox.call_guest_function_by_name(
-        "Echo",
-        ReturnType::String,
-        Some(vec![ParameterValue::String("Hello, World!".to_string())]),
-    )?;
+    let res: String = sbox.call_guest_function_by_name("Echo", "Hello, World!".to_string())?;
     let elapsed = current_time.elapsed();
     println!("Function call finished in {:?}.", elapsed);
-    assert!(matches!(res, ReturnValue::String(s) if s == "Hello, World!"));
+    assert_eq!(res, "Hello, World!");
     Ok(())
 }

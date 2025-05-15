@@ -35,7 +35,6 @@ fuzz_target!(
         let u_sbox = UninitializedSandbox::new(
             GuestBinary::FilePath(simple_guest_for_fuzzing_as_string().expect("Guest Binary Missing")),
             None,
-            None,
         )
         .unwrap();
 
@@ -43,8 +42,8 @@ fuzz_target!(
         SANDBOX.set(Mutex::new(mu_sbox)).unwrap();
     },
 
-    |data: (ReturnType, Option<Vec<ParameterValue>>)| {
+    |data: (ReturnType, Vec<ParameterValue>)| {
         let mut sandbox = SANDBOX.get().unwrap().lock().unwrap();
-        let _ = sandbox.call_guest_function_by_name("PrintOutput", data.0, data.1);
+        let _ = sandbox.call_type_erased_guest_function_by_name("PrintOutput", data.0, data.1);
     }
 );

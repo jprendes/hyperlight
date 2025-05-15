@@ -42,8 +42,7 @@ fn main() -> hyperlight_host::Result<()> {
     // Create an uninitialized sandbox with a guest binary
     let mut uninitialized_sandbox = UninitializedSandbox::new(
         hyperlight_host::GuestBinary::FilePath(hyperlight_testing::simple_guest_as_string().unwrap()),
-        None, // default configuration
-        None, // default run options
+        None // default configuration
     )?;
 
     // Registering a host function makes it available to be called by the guest
@@ -60,10 +59,9 @@ fn main() -> hyperlight_host::Result<()> {
     let message = "Hello, World! I am executing inside of a VM :)\n".to_string();
     // in order to call a function it first must be defined in the guest and exposed so that 
     // the host can call it
-    let result = multi_use_sandbox.call_guest_function_by_name(
+    let result: i32 = multi_use_sandbox.call_guest_function_by_name(
         "PrintOutput",
-        ReturnType::Int,
-        Some(vec![ParameterValue::String(message.clone())]),
+        (message),
     );
 
     assert!(result.is_ok());

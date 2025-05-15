@@ -299,7 +299,6 @@ impl HypervisorHandler {
                                 {
                                     hv = Some(set_up_hypervisor_partition(
                                         execution_variables.shm.try_lock().map_err(|e| new_error!("Failed to lock shm: {}", e))?.deref_mut().as_mut().ok_or_else(|| new_error!("shm not set"))?,
-                                        configuration.outb_handler.clone(),
                                         #[cfg(gdb)]
                                         &debug_info,
                                     )?);
@@ -772,19 +771,15 @@ impl HypervisorHandler {
         }
         #[cfg(target_os = "windows")]
         {
-            if self.execution_variables.get_partition_handle()?.is_some() {
-                // partition handle only set when running in-hypervisor (not in-process)
-                unsafe {
-                    WHvCancelRunVirtualProcessor(
-                        #[allow(clippy::unwrap_used)]
-                        self.execution_variables.get_partition_handle()?.unwrap(), // safe unwrap as we checked is some
-                        0,
-                        0,
-                    )
-                    .map_err(|e| new_error!("Failed to cancel guest execution {:?}", e))?;
-                }
+            unsafe {
+                WHvCancelRunVirtualProcessor(
+                    #[allow(clippy::unwrap_used)]
+                    self.execution_variables.get_partition_handle()?.unwrap(), // safe unwrap as we checked is some
+                    0,
+                    0,
+                )
+                .map_err(|e| new_error!("Failed to cancel guest execution {:?}", e))?;
             }
-            // if running in-process on windows, we currently have no way of cancelling the execution
         }
 
         Ok(())
@@ -826,8 +821,6 @@ pub enum HandlerMsg {
 
 fn set_up_hypervisor_partition(
     mgr: &mut SandboxMemoryManager<GuestSharedMemory>,
-    #[allow(unused_variables)] // parameter only used for in-process mode
-    outb_handler: OutBHandlerWrapper,
     #[cfg(gdb)] debug_info: &Option<DebugInfo>,
 ) -> Result<Box<dyn Hypervisor>> {
     let mem_size = u64::try_from(mgr.shared_mem.mem_size())?;
@@ -863,7 +856,6 @@ fn set_up_hypervisor_partition(
     }
 
     // Create gdb thread if gdb is enabled and the configuration is provided
-    // This is only done when the hypervisor is not in-process
     #[cfg(gdb)]
     let gdb_conn = if let Some(DebugInfo { port }) = debug_info {
         let gdb_conn = create_gdb_thread(*port, unsafe { pthread_self() });
@@ -937,7 +929,6 @@ mod tests {
     use std::sync::{Arc, Barrier};
     use std::thread;
 
-    use hyperlight_common::flatbuffer_wrappers::function_types::{ParameterValue, ReturnType};
     use hyperlight_testing::simple_guest_as_string;
 
     #[cfg(target_os = "windows")]
@@ -975,7 +966,6 @@ mod tests {
         let usbox = UninitializedSandbox::new(
             GuestBinary::FilePath(simple_guest_as_string().expect("Guest Binary Missing")),
             cfg,
-            None,
         )
         .unwrap();
 
@@ -1022,11 +1012,7 @@ mod tests {
         let mut sandbox = create_multi_use_sandbox();
 
         let msg = "Hello, World!\n".to_string();
-        let res = sandbox.call_guest_function_by_name(
-            "PrintOutput",
-            ReturnType::Int,
-            Some(vec![ParameterValue::String(msg.clone())]),
-        );
+        let res = sandbox.call_guest_function_by_name::<i32>("PrintOutput", msg);
 
         assert!(res.is_ok());
 
@@ -1037,7 +1023,7 @@ mod tests {
     fn terminate_execution_then_call_another_function() -> Result<()> {
         let mut sandbox = create_multi_use_sandbox();
 
-        let res = sandbox.call_guest_function_by_name("Spin", ReturnType::Void, None);
+        let res = sandbox.call_guest_function_by_name::<()>("Spin", ());
 
         assert!(res.is_err());
 
@@ -1046,11 +1032,7 @@ mod tests {
             _ => panic!("Expected ExecutionTerminated error"),
         }
 
-        let res = sandbox.call_guest_function_by_name(
-            "Echo",
-            ReturnType::String,
-            Some(vec![ParameterValue::String("a".to_string())]),
-        );
+        let res = sandbox.call_guest_function_by_name::<String>("Echo", "a".to_string());
 
         assert!(res.is_ok());
 
@@ -1062,11 +1044,7 @@ mod tests {
     {
         let call_print_output = |sandbox: &mut MultiUseSandbox| {
             let msg = "Hello, World!\n".to_string();
-            let res = sandbox.call_guest_function_by_name(
-                "PrintOutput",
-                ReturnType::Int,
-                Some(vec![ParameterValue::String(msg.clone())]),
-            );
+            let res = sandbox.call_guest_function_by_name::<i32>("PrintOutput", msg);
 
             assert!(res.is_ok());
         };
