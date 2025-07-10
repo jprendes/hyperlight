@@ -141,6 +141,9 @@ pub(crate) trait Hypervisor: Debug + Sync + Send {
     /// Unmap the most recent `n` regions mapped by `map_region`
     unsafe fn unmap_regions(&mut self, n: u64) -> Result<()>;
 
+    /// Get a list of mapped regions
+    fn get_mapped_regions(&self) -> &[MemoryRegion];
+
     /// Dispatch a call from the host to the guest using the given pointer
     /// to the dispatch function _in the guest's address space_.
     ///

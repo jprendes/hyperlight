@@ -290,6 +290,7 @@ pub(crate) struct KVMDriver {
     entrypoint: u64,
     orig_rsp: GuestPtr,
     mem_regions: Vec<MemoryRegion>,
+    base_regions: usize,
     interrupt_handle: Arc<LinuxInterruptHandle>,
 
     #[cfg(gdb)]
@@ -364,6 +365,8 @@ impl KVMDriver {
             sig_rt_min_offset: config.get_interrupt_vcpu_sigrtmin_offset(),
         });
 
+        let base_regions = mem_regions.len();
+
         #[allow(unused_mut)]
         let mut hv = Self {
             _kvm: kvm,
@@ -373,6 +376,7 @@ impl KVMDriver {
             entrypoint,
             orig_rsp: rsp_gp,
             mem_regions,
+            base_regions,
             interrupt_handle: interrupt_handle.clone(),
             #[cfg(gdb)]
             debug,
@@ -511,7 +515,13 @@ impl Hypervisor for KVMDriver {
 
     #[instrument(err(Debug), skip_all, parent = Span::current(), level = "Trace")]
     unsafe fn unmap_regions(&mut self, n: u64) -> Result<()> {
-        let n_keep = self.mem_regions.len() - n as usize;
+        let n_keep = self.mem_regions.len().saturating_sub(n as usize);
+        if n_keep < self.base_regions {
+            log_then_return!(
+                "Asked to unmap {n} regions, but only {} regions are mapped",
+                self.mem_regions.len() - self.base_regions
+            );
+        }
         for (k, region) in self.mem_regions.split_off(n_keep).iter().enumerate() {
             let mut kvm_region: kvm_userspace_memory_region = region.clone().into();
             kvm_region.slot = (n_keep + k) as u32;
@@ -522,6 +532,10 @@ impl Hypervisor for KVMDriver {
             unsafe { self.vm_fd.set_user_memory_region(kvm_region) }?;
         }
         Ok(())
+    }
+
+    fn get_mapped_regions(&self) -> &[MemoryRegion] {
+        &self.mem_regions[self.base_regions..]
     }
 
     #[instrument(err(Debug), skip_all, parent = Span::current(), level = "Trace")]

@@ -630,6 +630,10 @@ impl Hypervisor for HypervWindowsDriver {
         Ok(())
     }
 
+    fn get_mapped_regions(&self) -> &[MemoryRegion] {
+        &[]
+    }
+
     #[instrument(err(Debug), skip_all, parent = Span::current(), level = "Trace")]
     fn dispatch_call_from_host(
         &mut self,

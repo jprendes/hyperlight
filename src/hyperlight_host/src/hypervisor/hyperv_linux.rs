@@ -302,6 +302,7 @@ pub(crate) struct HypervLinuxDriver {
     vcpu_fd: VcpuFd,
     entrypoint: u64,
     mem_regions: Vec<MemoryRegion>,
+    base_regions: usize,
     orig_rsp: GuestPtr,
     interrupt_handle: Arc<LinuxInterruptHandle>,
 
@@ -422,6 +423,8 @@ impl HypervLinuxDriver {
             dropped: AtomicBool::new(false),
         });
 
+        let base_regions = mem_regions.len();
+
         #[allow(unused_mut)]
         let mut hv = Self {
             _mshv: mshv,
@@ -429,6 +432,7 @@ impl HypervLinuxDriver {
             vm_fd,
             vcpu_fd,
             mem_regions,
+            base_regions,
             entrypoint: entrypoint_ptr.absolute()?,
             orig_rsp: rsp_ptr,
             interrupt_handle: interrupt_handle.clone(),
@@ -603,14 +607,22 @@ impl Hypervisor for HypervLinuxDriver {
 
     #[instrument(err(Debug), skip_all, parent = Span::current(), level = "Trace")]
     unsafe fn unmap_regions(&mut self, n: u64) -> Result<()> {
-        for rgn in self
-            .mem_regions
-            .split_off(self.mem_regions.len() - n as usize)
-        {
+        let n_keep = self.mem_regions.len().saturating_sub(n as usize);
+        if n_keep < self.base_regions {
+            log_then_return!(
+                "Asked to unmap {n} regions, but only {} regions are mapped",
+                self.mem_regions.len() - self.base_regions
+            );
+        }
+        for rgn in self.mem_regions.split_off(n_keep) {
             let mshv_region: mshv_user_mem_region = rgn.to_owned().into();
             self.vm_fd.unmap_user_memory(mshv_region)?;
         }
         Ok(())
+    }
+
+    fn get_mapped_regions(&self) -> &[MemoryRegion] {
+        &self.mem_regions[self.base_regions..]
     }
 
     #[instrument(err(Debug), skip_all, parent = Span::current(), level = "Trace")]
