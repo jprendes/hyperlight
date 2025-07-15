@@ -16,6 +16,8 @@ limitations under the License.
 
 use crate::mem::shared_mem_snapshot::SharedMemorySnapshot;
 
+mod mem;
+
 /// A snapshot capturing the state of the memory in a `MultiUseSandbox`.
 #[derive(Clone)]
 pub struct Snapshot {
