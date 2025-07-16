@@ -260,7 +260,7 @@ where
     }
 
     pub(crate) fn snapshot(&mut self) -> Result<SharedMemorySnapshot> {
-        SharedMemorySnapshot::new(&mut self.shared_mem, self.mapped_rgns)
+        SharedMemorySnapshot::new(&mut self.shared_mem)
     }
 
     /// This function restores a memory snapshot from a given snapshot.

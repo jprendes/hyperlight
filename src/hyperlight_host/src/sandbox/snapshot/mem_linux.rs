@@ -1,10 +1,15 @@
 use std::fmt::Debug;
-use std::ops::Deref;
+use std::ops::{Bound, Deref, RangeBounds};
 use std::os::fd::{AsRawFd as _, FromRawFd};
 use std::ptr::null_mut;
 use std::sync::Arc;
 
-use libc::{MAP_FAILED, MAP_FIXED, MAP_NORESERVE, MAP_PRIVATE, MAP_SHARED, PROT_READ, PROT_WRITE};
+use libc::{
+    MAP_FAILED, MAP_FIXED, MAP_NORESERVE, MAP_PRIVATE, MAP_SHARED, PROT_EXEC, PROT_NONE, PROT_READ,
+    PROT_WRITE,
+};
+
+use super::MemoryAccess;
 
 #[derive(Debug)]
 pub struct MemorySnapshot {
@@ -124,6 +129,46 @@ impl<const FLAGS: libc::c_int, S: Deref<Target = MemorySnapshot> + Debug> Mapped
         }
         Ok(())
     }
+
+    pub fn protect(
+        &mut self,
+        offset: impl RangeBounds<usize>,
+        access: MemoryAccess,
+    ) -> std::io::Result<()> {
+        let start = match offset.start_bound() {
+            Bound::Included(&s) => s,
+            Bound::Excluded(&s) => s + 1,
+            Bound::Unbounded => 0,
+        };
+        let end = match offset.end_bound() {
+            Bound::Included(&s) => s + 1,
+            Bound::Excluded(&s) => s,
+            Bound::Unbounded => self.length,
+        };
+
+        if end <= start || end > self.length {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Invalid range for memory protection",
+            ));
+        }
+
+        if start != start.next_multiple_of(page_size::get())
+            || end != end.next_multiple_of(page_size::get())
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Memory protection range must be page-aligned",
+            ));
+        }
+
+        let res =
+            unsafe { libc::mprotect(self.ptr.add(start) as _, end - start, access.to_posix()) };
+        if res < 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(())
+    }
 }
 
 impl<const FLAGS: libc::c_int, S: Clone + Debug> MappedMemory<FLAGS, S> {
@@ -137,5 +182,25 @@ impl<const FLAGS: libc::c_int, S: Debug> Drop for MappedMemory<FLAGS, S> {
         unsafe {
             libc::munmap(self.ptr as _, self.length);
         }
+    }
+}
+
+impl MemoryAccess {
+    fn to_posix(&self) -> libc::c_int {
+        let mut access = 0;
+        if *self == MemoryAccess::NONE {
+            access = PROT_NONE;
+        } else {
+            if self.contains(MemoryAccess::READ) {
+                access |= PROT_READ;
+            }
+            if self.contains(MemoryAccess::WRITE) {
+                access |= PROT_WRITE;
+            }
+            if self.contains(MemoryAccess::EXEC) {
+                access |= PROT_EXEC;
+            }
+        }
+        access
     }
 }

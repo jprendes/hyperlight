@@ -24,21 +24,16 @@ use crate::Result;
 #[derive(Clone)]
 pub(crate) struct SharedMemorySnapshot {
     snapshot: Vec<u8>,
-    /// How many non-main-RAM regions were mapped when this snapshot was taken?
-    mapped_rgns: u64,
 }
 
 impl SharedMemorySnapshot {
     /// Take a snapshot of the memory in `shared_mem`, then create a new
     /// instance of `Self` with the snapshot stored therein.
     #[instrument(err(Debug), skip_all, parent = Span::current(), level= "Trace")]
-    pub(super) fn new<S: SharedMemory>(shared_mem: &mut S, mapped_rgns: u64) -> Result<Self> {
+    pub(super) fn new<S: SharedMemory>(shared_mem: &mut S) -> Result<Self> {
         // TODO: Track dirty pages instead of copying entire memory
         let snapshot = shared_mem.with_exclusivity(|e| e.copy_all_to_vec())??;
-        Ok(Self {
-            snapshot,
-            mapped_rgns,
-        })
+        Ok(Self { snapshot })
     }
 
     /// Take another snapshot of the internally-stored `SharedMemory`,
@@ -55,7 +50,7 @@ impl SharedMemorySnapshot {
     #[instrument(err(Debug), skip_all, parent = Span::current(), level= "Trace")]
     pub(super) fn restore_from_snapshot<S: SharedMemory>(&self, shared_mem: &mut S) -> Result<u64> {
         shared_mem.with_exclusivity(|e| e.copy_from_slice(self.snapshot.as_slice(), 0))??;
-        Ok(self.mapped_rgns)
+        Ok(0)
     }
 
     /// Return the size of the snapshot in bytes.
@@ -78,7 +73,7 @@ mod tests {
         let data2 = data1.iter().map(|b| b + 1).collect::<Vec<u8>>();
         let mut gm = ExclusiveSharedMemory::new(PAGE_SIZE_USIZE).unwrap();
         gm.copy_from_slice(data1.as_slice(), 0).unwrap();
-        let mut snap = super::SharedMemorySnapshot::new(&mut gm, 0).unwrap();
+        let mut snap = super::SharedMemorySnapshot::new(&mut gm).unwrap();
         {
             // after the first snapshot is taken, make sure gm has the equivalent
             // of data1

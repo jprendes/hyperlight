@@ -39,6 +39,7 @@ use windows::core::PCSTR;
 use crate::HyperlightError::MemoryAllocationFailed;
 #[cfg(target_os = "windows")]
 use crate::HyperlightError::{MemoryRequestTooBig, WindowsAPIError};
+use crate::sandbox::snapshot::mem::ArcCowMappedMemory;
 use crate::{Result, log_then_return, new_error};
 
 /// Makes sure that the given `offset` and `size` are within the bounds of the memory with size `mem_size`.
@@ -91,38 +92,7 @@ macro_rules! generate_writer {
 /// Send or Sync, since it doesn't ensure any particular synchronization.
 #[derive(Debug)]
 pub struct HostMapping {
-    ptr: *mut u8,
-    size: usize,
-    #[cfg(target_os = "windows")]
-    handle: HANDLE,
-}
-
-impl Drop for HostMapping {
-    #[cfg(target_os = "linux")]
-    fn drop(&mut self) {
-        use libc::munmap;
-
-        unsafe {
-            munmap(self.ptr as *mut c_void, self.size);
-        }
-    }
-    #[cfg(target_os = "windows")]
-    fn drop(&mut self) {
-        let mem_mapped_address = MEMORY_MAPPED_VIEW_ADDRESS {
-            Value: self.ptr as *mut c_void,
-        };
-        if let Err(e) = unsafe { UnmapViewOfFile(mem_mapped_address) } {
-            tracing::error!(
-                "Failed to drop HostMapping (UnmapViewOfFile failed): {:?}",
-                e
-            );
-        }
-
-        let file_handle: HANDLE = self.handle;
-        if let Err(e) = unsafe { CloseHandle(file_handle) } {
-            tracing::error!("Failed to  drop HostMapping (CloseHandle failed): {:?}", e);
-        }
-    }
+    mem: ArcCowMappedMemory,
 }
 
 /// These three structures represent various phases of the lifecycle of
@@ -144,7 +114,7 @@ unsafe impl Send for ExclusiveSharedMemory {}
 /// unit that likely can't be discovered by the compiler) that _rust_
 /// users do not perform racy accesses to the guest communication
 /// buffers that are also accessed by HostSharedMemory.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct GuestSharedMemory {
     region: Arc<HostMapping>,
     /// The lock that indicates this shared memory is being used by non-Rust code
@@ -576,7 +546,7 @@ impl ExclusiveSharedMemory {
     ///   the safety documentation of pointer::offset.
     ///
     ///   This is ensured by a check in ::new()
-    pub(super) fn as_mut_slice(&mut self) -> &mut [u8] {
+    pub(crate) fn as_mut_slice(&mut self) -> &mut [u8] {
         unsafe { std::slice::from_raw_parts_mut(self.base_ptr(), self.mem_size()) }
     }
 

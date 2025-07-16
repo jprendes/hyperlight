@@ -1,8 +1,20 @@
+use bitflags::bitflags;
+
 #[cfg_attr(target_os = "linux", path = "mem_linux.rs")]
 #[cfg_attr(target_os = "windows", path = "mem_win.rs")]
 mod r#impl;
 
 pub(crate) use r#impl::{ArcCowMappedMemory, CowMappedMemory, MemorySnapshot, MutableMappedMemory};
+
+bitflags! {
+    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    pub struct MemoryAccess: u8 {
+        const NONE = 0x00;
+        const READ = 0x01;
+        const WRITE = 0x02;
+        const EXEC = 0x04;
+    }
+}
 
 #[cfg(test)]
 mod tests {
