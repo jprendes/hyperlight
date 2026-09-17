@@ -534,6 +534,8 @@ coverage-run hypervisor="kvm": ensure-cargo-llvm-cov
     cargo +nightly test -p hyperlight-host --lib -- sandbox::initialized_multi_use::tests::from_snapshot::max_guest_log_level_is_honored_from_snapshot --exact --ignored
     cargo +nightly test -p hyperlight-host --lib -- sandbox::initialized_multi_use::tests::from_snapshot::max_guest_log_level_overrides_initialized_snapshot --exact --ignored
     cargo +nightly test -p hyperlight-host --lib -- sandbox::initialized_multi_use::tests::from_snapshot::max_guest_log_level_setter_survives_restore --exact --ignored
+    cargo +nightly test -p hyperlight-host --lib -- sandbox::initialized_multi_use::tests::from_snapshot::max_guest_log_level_can_be_disabled_and_reenabled --exact --ignored
+    cargo +nightly test -p hyperlight-host --lib -- sandbox::initialized_multi_use::tests::from_snapshot::max_guest_log_level_can_be_enabled_after_off_init --exact --ignored
     cargo +nightly test -p hyperlight-host --test integration_test -- log_message --exact --ignored
     cargo +nightly test -p hyperlight-host --no-default-features -F function_call_metrics,{{ if hypervisor == "mshv3" { "mshv3" } else { "kvm" } }} --lib -- metrics::tests::test_metrics_are_emitted --exact
 
