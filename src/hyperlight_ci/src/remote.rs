@@ -77,6 +77,42 @@ fn gh(args: &[&str]) -> Result<Vec<u8>> {
     Ok(output.stdout)
 }
 
+/// Which repository to read, either `owner/name` or whichever one a git
+/// remote points at, `remote:origin`.
+pub(crate) fn repository(value: &str) -> Result<String> {
+    let Some(remote) = value.strip_prefix("remote:") else {
+        return Ok(value.to_string());
+    };
+
+    let output = Command::new("git")
+        .args(["remote", "get-url", remote])
+        .output()
+        .context("Failed to run git")?;
+
+    if !output.status.success() {
+        bail!(
+            "Failed to read the url of remote {remote}: {}",
+            String::from_utf8_lossy(&output.stderr).trim()
+        );
+    }
+
+    let url = String::from_utf8_lossy(&output.stdout);
+    owner_and_name(&url)
+        .with_context(|| format!("Remote {remote} names no repository: {}", url.trim()))
+}
+
+/// The owner and name a clone url ends with, however it spells the host.
+fn owner_and_name(url: &str) -> Option<String> {
+    let url = url.trim().trim_end_matches('/');
+    let url = url.strip_suffix(".git").unwrap_or(url);
+
+    let mut parts = url.rsplit(['/', ':']);
+    let name = parts.next()?;
+    let owner = parts.next()?;
+
+    (!name.is_empty() && !owner.is_empty()).then(|| format!("{owner}/{name}"))
+}
+
 /// Names of the benchmark artifacts a run still holds.
 fn artifacts(repo: &str, run: u64) -> Result<Vec<String>> {
     let path = format!("repos/{repo}/actions/runs/{run}/artifacts");
@@ -369,4 +405,34 @@ fn unpack(archive: &Path, into: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reads_the_repository_a_clone_url_ends_with() {
+        for url in [
+            "git@github.com:hyperlight-dev/hyperlight.git",
+            "https://github.com/hyperlight-dev/hyperlight.git",
+            "https://github.com/hyperlight-dev/hyperlight",
+            "ssh://git@github.com/hyperlight-dev/hyperlight.git",
+            "  git@github.com:hyperlight-dev/hyperlight.git\n",
+        ] {
+            assert_eq!(
+                owner_and_name(url).as_deref(),
+                Some("hyperlight-dev/hyperlight"),
+                "{url}"
+            );
+        }
+    }
+
+    #[test]
+    fn keeps_a_repository_named_outright() {
+        assert_eq!(
+            repository("hyperlight-dev/hyperlight").unwrap(),
+            "hyperlight-dev/hyperlight"
+        );
+    }
 }
