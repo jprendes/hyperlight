@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright 2025 The Hyperlight Authors.
-
 use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -15,6 +14,7 @@ use hyperlight_common::flatbuffer_wrappers::util::estimate_flatbuffer_capacity;
 use hyperlight_common::transport::ExternalValues;
 use hyperlight_common::vmem::PAGE_SIZE;
 use hyperlight_host::mem::shared_mem::ExclusiveSharedMemory;
+#[allow(deprecated)]
 use hyperlight_host::sandbox::{Sandbox, SandboxConfiguration, UninitializedSandbox};
 use hyperlight_host::{GuestBinary, SandboxBuilder};
 use hyperlight_testing::sandbox_sizes::{LARGE_HEAP_SIZE, MEDIUM_HEAP_SIZE, SMALL_HEAP_SIZE};
@@ -344,6 +344,7 @@ fn snapshots_benchmark(c: &mut Criterion) {
 // Benchmark Category: Guest Calls (Large Parameters)
 // ============================================================================
 
+#[allow(deprecated)]
 fn guest_call_benchmark_large_param(c: &mut Criterion) {
     let mut group = c.benchmark_group("guest_functions_with_large_parameters");
     #[cfg(target_os = "windows")]
@@ -518,6 +519,7 @@ fn function_call_codec_benchmark(c: &mut Criterion) {
 fn sample_workloads_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("sample_workloads");
 
+    #[allow(deprecated)]
     fn bench_24k_in_8k_out(b: &mut criterion::Bencher, guest_path: std::path::PathBuf) {
         let mut cfg = SandboxConfiguration::default();
         cfg.set_h2g_pool_pages(8);

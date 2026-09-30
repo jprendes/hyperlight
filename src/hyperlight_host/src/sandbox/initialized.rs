@@ -237,6 +237,7 @@ impl Sandbox {
     /// # Ok(())
     /// # }
     /// ```
+    #[allow(deprecated)]
     #[instrument(err(Debug), skip_all, parent = Span::current(), level = "Trace")]
     pub fn from_snapshot(
         snapshot: Arc<Snapshot>,
@@ -1184,6 +1185,7 @@ impl std::fmt::Debug for Sandbox {
 /// disagrees with `snapshot`. Used by [`Sandbox::from_snapshot`]
 /// to surface ignored caller-supplied layout values, since those
 /// fields are always taken from the snapshot.
+#[allow(deprecated)]
 fn warn_on_layout_override(
     caller: &crate::sandbox::SandboxConfiguration,
     snapshot: &crate::mem::layout::SandboxMemoryLayout,
@@ -1243,6 +1245,7 @@ fn warn_on_layout_override(
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use std::sync::{Arc, Barrier};
     use std::thread;

@@ -3,7 +3,6 @@
 
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-#[cfg(target_os = "linux")]
 use std::time::Duration;
 
 use hyperlight_common::func::{ParameterTuple, SupportedReturnType};
@@ -11,14 +10,17 @@ use tracing_core::LevelFilter;
 
 use crate::func::HostFunction;
 use crate::mem::memory_region::{MemoryRegion, MemoryRegionFlags};
+#[allow(deprecated)]
 use crate::sandbox::SandboxConfiguration;
 #[cfg(gdb)]
 use crate::sandbox::config::DebugInfo;
 #[cfg(target_arch = "x86_64")]
 use crate::sandbox::config::GuestMsrError;
+use crate::sandbox::config::defaults;
 use crate::sandbox::host_funcs::FunctionEntry;
 use crate::sandbox::snapshot::Snapshot;
 use crate::sandbox::uninitialized::{GuestBlob, GuestEnvironment};
+#[allow(deprecated)]
 use crate::{GuestBinary, HostFunctions, Result, Sandbox, UninitializedSandbox, new_error};
 
 /// What a [`SandboxBuilder`] builds the sandbox from.
@@ -84,6 +86,7 @@ impl Source {
 /// # Ok(())
 /// # }
 /// ```
+#[allow(deprecated)]
 pub struct SandboxBuilder {
     source: Source,
     cfg: SandboxConfiguration,
@@ -95,6 +98,31 @@ pub struct SandboxBuilder {
 }
 
 impl SandboxBuilder {
+    /// The default interrupt retry delay.
+    pub const DEFAULT_INTERRUPT_RETRY_DELAY: Duration = defaults::INTERRUPT_RETRY_DELAY;
+    /// The default signal offset from `SIGRTMIN` used to interrupt the VCPU thread.
+    pub const INTERRUPT_VCPU_SIGRTMIN_OFFSET: u8 = defaults::INTERRUPT_VCPU_SIGRTMIN_OFFSET;
+    /// The default guest heap size.
+    pub const DEFAULT_HEAP_SIZE: u64 = defaults::HEAP_SIZE;
+    /// The default writable memory offered to the guest.
+    pub const DEFAULT_SCRATCH_SIZE: usize = defaults::SCRATCH_SIZE;
+    /// The default G2H virtqueue descriptor count.
+    pub const DEFAULT_G2H_QUEUE_SIZE: usize = defaults::G2H_QUEUE_SIZE;
+    /// The default H2G virtqueue descriptor count.
+    pub const DEFAULT_H2G_QUEUE_SIZE: usize = defaults::H2G_QUEUE_SIZE;
+    /// The default G2H upper-tier buffer size.
+    pub const DEFAULT_G2H_BUFFER_SIZE: usize = defaults::G2H_BUFFER_SIZE;
+    /// The default H2G buffer size.
+    pub const DEFAULT_H2G_BUFFER_SIZE: usize = defaults::H2G_BUFFER_SIZE;
+    /// The default total number of G2H pool pages.
+    pub const DEFAULT_G2H_POOL_PAGES: usize = defaults::G2H_POOL_PAGES;
+    /// The default total number of H2G pool pages.
+    pub const DEFAULT_H2G_POOL_PAGES: usize = defaults::H2G_POOL_PAGES;
+    /// The maximum number of distinct guest MSRs that can be declared.
+    #[cfg(target_arch = "x86_64")]
+    pub const MAX_GUEST_MSRS: usize = defaults::MAX_GUEST_MSRS;
+
+    #[allow(deprecated)]
     fn with_source(source: Source) -> Self {
         Self {
             source,
@@ -131,6 +159,7 @@ impl SandboxBuilder {
     ///
     /// When building from a snapshot, returns an error if [`Self::init_data`]
     /// is set because the snapshot already contains it.
+    #[allow(deprecated)]
     pub fn build(self) -> Result<Sandbox> {
         let Self {
             source,
@@ -304,15 +333,14 @@ impl SandboxBuilder {
 }
 
 impl SandboxBuilder {
-    /// Set the guest heap size. A size of 0 selects
-    /// [`SandboxConfiguration::DEFAULT_HEAP_SIZE`].
+    /// Set the guest heap size. A size of 0 selects [`Self::DEFAULT_HEAP_SIZE`].
     pub fn heap_size(mut self, size: u64) -> Self {
         self.cfg.set_heap_size(size);
         self
     }
 
-    /// The guest heap size, defaulting to
-    /// [`SandboxConfiguration::DEFAULT_HEAP_SIZE`] when no override is set.
+    /// The guest heap size, defaulting to [`Self::DEFAULT_HEAP_SIZE`] when no
+    /// override is set.
     pub fn get_heap_size(&self) -> u64 {
         self.cfg.get_heap_size()
     }
@@ -330,7 +358,7 @@ impl SandboxBuilder {
 
     /// Set the G2H virtqueue descriptor count.
     ///
-    /// See [`SandboxConfiguration::set_g2h_queue_size`] for normalization.
+    /// Values are rounded up to a power of two in `2..=32768`.
     pub fn g2h_queue_size(mut self, size: usize) -> Self {
         self.cfg.set_g2h_queue_size(size);
         self
@@ -338,7 +366,7 @@ impl SandboxBuilder {
 
     /// Set the H2G virtqueue descriptor count.
     ///
-    /// See [`SandboxConfiguration::set_h2g_queue_size`] for normalization.
+    /// Values are rounded up to a power of two in `2..=32768`.
     pub fn h2g_queue_size(mut self, size: usize) -> Self {
         self.cfg.set_h2g_queue_size(size);
         self
@@ -346,8 +374,7 @@ impl SandboxBuilder {
 
     /// Set the G2H upper-tier buffer capacity in bytes.
     ///
-    /// Clamps the size via [`SandboxConfiguration::set_g2h_buffer_size`]
-    /// and grows the pool if needed.
+    /// Values are clamped to `256..=u32::MAX`. The pool grows if needed.
     pub fn g2h_buffer_size(mut self, size: usize) -> Self {
         self.cfg.set_g2h_buffer_size(size);
         self
@@ -355,8 +382,7 @@ impl SandboxBuilder {
 
     /// Set the H2G buffer capacity in bytes.
     ///
-    /// Clamps the size via [`SandboxConfiguration::set_h2g_buffer_size`]
-    /// and grows the pool if needed.
+    /// Values are clamped to `256..=u32::MAX`. The pool grows if needed.
     pub fn h2g_buffer_size(mut self, size: usize) -> Self {
         self.cfg.set_h2g_buffer_size(size);
         self
@@ -364,7 +390,7 @@ impl SandboxBuilder {
 
     /// Set the G2H pool size in guest pages.
     ///
-    /// See [`SandboxConfiguration::set_g2h_pool_pages`] for the minimum capacity.
+    /// The configured value is raised to the minimum transport capacity.
     pub fn g2h_pool_pages(mut self, pages: usize) -> Self {
         self.cfg.set_g2h_pool_pages(pages);
         self
@@ -372,7 +398,7 @@ impl SandboxBuilder {
 
     /// Set the H2G pool size in guest pages.
     ///
-    /// See [`SandboxConfiguration::set_h2g_pool_pages`] for the minimum capacity.
+    /// The configured value is raised to the minimum transport capacity.
     pub fn h2g_pool_pages(mut self, pages: usize) -> Self {
         self.cfg.set_h2g_pool_pages(pages);
         self
@@ -381,14 +407,14 @@ impl SandboxBuilder {
     /// Declare MSRs the guest owns, saved and restored with the rest of the
     /// sandbox state. Adds to the declared set, so repeated calls accumulate.
     ///
-    /// See [`SandboxConfiguration::guest_msrs`] for the platform-specific
-    /// behavior and the capacity limit.
+    /// On KVM, the guest can access only declared MSRs. On MSHV and WHP,
+    /// declarations control saved state but do not restrict guest access.
     ///
     /// # Errors
     ///
     /// Returns [`GuestMsrError::CapacityExceeded`] if the distinct entries
-    /// would exceed [`SandboxConfiguration::MAX_GUEST_MSRS`]. The declared set
-    /// is unchanged on error.
+    /// would exceed [`Self::MAX_GUEST_MSRS`]. The declared set is unchanged on
+    /// error.
     #[cfg(target_arch = "x86_64")]
     pub fn guest_msrs(mut self, indices: &[u32]) -> std::result::Result<Self, GuestMsrError> {
         self.cfg.guest_msrs(indices)?;
@@ -455,12 +481,33 @@ impl SandboxBuilder {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use hyperlight_common::vmem::PAGE_SIZE;
     use hyperlight_testing::simple_guest_as_string;
     use tracing_core::LevelFilter;
 
     use super::SandboxBuilder;
     use crate::mem::memory_region::MemoryRegionFlags;
+
+    #[test]
+    fn configuration_defaults_are_exposed() {
+        assert_eq!(
+            SandboxBuilder::DEFAULT_INTERRUPT_RETRY_DELAY,
+            Duration::from_micros(500)
+        );
+        assert_eq!(SandboxBuilder::INTERRUPT_VCPU_SIGRTMIN_OFFSET, 0);
+        assert_eq!(SandboxBuilder::DEFAULT_HEAP_SIZE, 131_072);
+        assert_eq!(SandboxBuilder::DEFAULT_SCRATCH_SIZE, 0x58000);
+        assert_eq!(SandboxBuilder::DEFAULT_G2H_QUEUE_SIZE, 64);
+        assert_eq!(SandboxBuilder::DEFAULT_H2G_QUEUE_SIZE, 32);
+        assert_eq!(SandboxBuilder::DEFAULT_G2H_BUFFER_SIZE, PAGE_SIZE);
+        assert_eq!(SandboxBuilder::DEFAULT_H2G_BUFFER_SIZE, PAGE_SIZE);
+        assert_eq!(SandboxBuilder::DEFAULT_G2H_POOL_PAGES, 12);
+        assert_eq!(SandboxBuilder::DEFAULT_H2G_POOL_PAGES, 8);
+        #[cfg(target_arch = "x86_64")]
+        assert_eq!(SandboxBuilder::MAX_GUEST_MSRS, 16);
+    }
 
     #[test]
     fn transport_settings_are_normalized() {

@@ -746,6 +746,7 @@ impl Snapshot {
         Self::load_inner(path.as_ref(), &reference.into(), true)
     }
 
+    #[allow(deprecated)]
     fn load_inner(
         path: &Path,
         reference: &OciReference,

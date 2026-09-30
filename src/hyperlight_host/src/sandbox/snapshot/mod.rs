@@ -2,6 +2,7 @@
 // Copyright 2025 The Hyperlight Authors.
 
 mod file;
+#[allow(deprecated)]
 mod file_tests;
 mod tripwires;
 
@@ -28,6 +29,7 @@ use crate::mem::memory_region::{MemoryRegion, MemoryRegionFlags};
 use crate::mem::mgr::{GuestPageTableBuffer, SnapshotSharedMemory};
 use crate::mem::shared_mem::{ReadonlySharedMemory, SharedMemory};
 use crate::mem::virtq::VirtqSnapshot;
+#[allow(deprecated)]
 use crate::sandbox::SandboxConfiguration;
 use crate::sandbox::uninitialized::{GuestBinary, GuestEnvironment};
 
@@ -301,6 +303,7 @@ fn map_specials(pt_buf: &GuestPageTableBuffer, scratch_size: usize) {
 impl Snapshot {
     /// Create a new snapshot from the guest binary identified by `env`. With the configuration
     /// specified in `cfg`.
+    #[allow(deprecated)]
     pub(crate) fn from_env<'b>(
         env: impl Into<GuestEnvironment<'b>>,
         cfg: SandboxConfiguration,
@@ -832,6 +835,7 @@ impl Snapshot {
 }
 
 #[cfg(test)]
+#[allow(deprecated)]
 mod tests {
     use hyperlight_common::flatbuffer_wrappers::host_function_details::HostFunctionDetails;
     use hyperlight_common::vmem::{self, BasicMapping, Mapping, MappingKind, PAGE_SIZE};
