@@ -301,7 +301,6 @@ fn bench_snapshot_restore(b: &mut criterion::Bencher, size: SandboxSize) {
 }
 
 fn bench_sandbox_from_snapshot(b: &mut criterion::Bencher, size: SandboxSize) {
-    use hyperlight_host::HostFunctions;
     use hyperlight_host::sandbox::snapshot::{OciTag, Snapshot};
 
     let dir = tempfile::tempdir().unwrap();
@@ -317,7 +316,11 @@ fn bench_sandbox_from_snapshot(b: &mut criterion::Bencher, size: SandboxSize) {
     // Drop is not included.
     b.iter_batched(
         || (),
-        |_| Sandbox::from_snapshot(loaded.clone(), HostFunctions::default(), None).unwrap(),
+        |_| {
+            SandboxBuilder::from_snapshot(loaded.clone())
+                .build()
+                .unwrap()
+        },
         criterion::BatchSize::PerIteration,
     );
 }
@@ -613,7 +616,6 @@ fn shared_memory_benchmark(c: &mut Criterion) {
 // ============================================================================
 
 fn snapshot_file_benchmark(c: &mut Criterion) {
-    use hyperlight_host::HostFunctions;
     use hyperlight_host::sandbox::snapshot::{OciTag, Snapshot};
 
     let mut group = c.benchmark_group("snapshot_files");
@@ -700,12 +702,9 @@ fn snapshot_file_benchmark(c: &mut Criterion) {
                 |_| {
                     let loaded =
                         Snapshot::checked_load(&snap_path, OciTag::new("latest").unwrap()).unwrap();
-                    let mut sbox = Sandbox::from_snapshot(
-                        std::sync::Arc::new(loaded),
-                        HostFunctions::default(),
-                        None,
-                    )
-                    .unwrap();
+                    let mut sbox = SandboxBuilder::from_snapshot(std::sync::Arc::new(loaded))
+                        .build()
+                        .unwrap();
                     sbox.call::<String>("Echo", "hello\n".to_string()).unwrap();
                     sbox
                 },
@@ -725,12 +724,9 @@ fn snapshot_file_benchmark(c: &mut Criterion) {
                     |_| {
                         let loaded =
                             Snapshot::load(&snap_path, OciTag::new("latest").unwrap()).unwrap();
-                        let mut sbox = Sandbox::from_snapshot(
-                            std::sync::Arc::new(loaded),
-                            HostFunctions::default(),
-                            None,
-                        )
-                        .unwrap();
+                        let mut sbox = SandboxBuilder::from_snapshot(std::sync::Arc::new(loaded))
+                            .build()
+                            .unwrap();
                         sbox.call::<String>("Echo", "hello\n".to_string()).unwrap();
                         sbox
                     },
