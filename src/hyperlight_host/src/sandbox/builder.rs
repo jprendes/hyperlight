@@ -243,10 +243,42 @@ impl SandboxBuilder {
     /// `guest_base` must be page-aligned and lie outside the sandbox's primary
     /// shared memory region. Violations surface as an error from
     /// [`Self::build`], not here. Call this once per file to map several.
+    ///
+    /// [`Self::shared_mem_size`] reports the size of that region.
     pub fn mapped_file_cow(mut self, path: impl AsRef<Path>, guest_base: u64) -> Self {
         self.mapped_file_cow
             .push((path.as_ref().to_path_buf(), guest_base));
         self
+    }
+
+    /// The size in bytes of the sandbox's primary shared memory region.
+    ///
+    /// The region starts at `0x4000`. Guest addresses passed to
+    /// [`Self::mapped_file_cow`] must lie outside it.
+    ///
+    /// The size depends on the guest binary and on the memory settings, so
+    /// this lays out guest memory to compute it and discards the result. Call
+    /// it once, after the memory settings are final.
+    pub fn shared_mem_size(&self) -> Result<usize> {
+        use crate::mem::shared_mem::SharedMemory;
+
+        match &self.source {
+            Source::Snapshot(snapshot) => Ok(snapshot.memory().mem_size()),
+            Source::GuestBinary(guest_binary) => {
+                let guest_binary = match guest_binary {
+                    GuestBinary::FilePath(path) => GuestBinary::FilePath(path.clone()),
+                    GuestBinary::Buffer(buffer) => GuestBinary::Buffer(buffer.clone()),
+                };
+                let env = GuestEnvironment {
+                    guest_binary,
+                    init_data: self.init_data.as_ref().map(|(data, flags)| GuestBlob {
+                        data,
+                        permissions: *flags,
+                    }),
+                };
+                Ok(Snapshot::from_env(env, self.cfg)?.memory().mem_size())
+            }
+        }
     }
 
     /// Maps a region of host memory into the sandbox address space.
@@ -507,6 +539,85 @@ mod tests {
         assert_eq!(SandboxBuilder::DEFAULT_H2G_POOL_PAGES, 8);
         #[cfg(target_arch = "x86_64")]
         assert_eq!(SandboxBuilder::MAX_GUEST_MSRS, 16);
+    }
+
+    #[test]
+    #[allow(deprecated)]
+    fn shared_mem_size_matches_the_built_sandbox() {
+        let path = simple_guest_as_string().unwrap();
+
+        let builder = SandboxBuilder::from_file(&path).heap_size(256 * 1024);
+        let reported = builder.shared_mem_size().unwrap();
+
+        let mut cfg = crate::sandbox::SandboxConfiguration::default();
+        cfg.set_heap_size(256 * 1024);
+        let uninit =
+            crate::UninitializedSandbox::new(crate::GuestBinary::FilePath(path.into()), Some(cfg))
+                .unwrap();
+
+        assert_eq!(reported, uninit.shared_mem_size());
+    }
+
+    #[test]
+    fn shared_mem_size_tracks_memory_settings() {
+        let path = simple_guest_as_string().unwrap();
+
+        let small = SandboxBuilder::from_file(&path).shared_mem_size().unwrap();
+        let large = SandboxBuilder::from_file(&path)
+            .heap_size(8 * 1024 * 1024)
+            .shared_mem_size()
+            .unwrap();
+
+        assert!(large > small);
+    }
+
+    #[test]
+    fn shared_mem_size_bounds_the_file_mapping_region() {
+        use std::io::Write;
+
+        use crate::mem::layout::SandboxMemoryLayout;
+
+        let path = simple_guest_as_string().unwrap();
+        let size = SandboxBuilder::from_file(&path).shared_mem_size().unwrap();
+
+        let mut file = tempfile::NamedTempFile::new().unwrap();
+        file.write_all(&vec![0u8; PAGE_SIZE]).unwrap();
+
+        let just_outside = SandboxMemoryLayout::BASE_ADDRESS as u64 + size as u64;
+        assert!(
+            SandboxBuilder::from_file(&path)
+                .mapped_file_cow(file.path(), just_outside)
+                .build()
+                .is_ok()
+        );
+
+        let just_inside = just_outside - PAGE_SIZE as u64;
+        assert!(
+            SandboxBuilder::from_file(&path)
+                .mapped_file_cow(file.path(), just_inside)
+                .build()
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn shared_mem_size_from_snapshot_reports_the_snapshot_region() {
+        let path = simple_guest_as_string().unwrap();
+        let mut sandbox = SandboxBuilder::from_file(&path).build().unwrap();
+        let snapshot = sandbox.snapshot().unwrap();
+
+        let size = SandboxBuilder::from_snapshot(snapshot.clone())
+            .shared_mem_size()
+            .unwrap();
+
+        assert!(size > 0);
+        assert!(size.is_multiple_of(PAGE_SIZE));
+        assert_eq!(
+            SandboxBuilder::from_snapshot(snapshot)
+                .shared_mem_size()
+                .unwrap(),
+            size
+        );
     }
 
     #[test]

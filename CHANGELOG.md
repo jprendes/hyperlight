@@ -5,6 +5,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ## [Prerelease] - Unreleased
 
 ### Added
+* `SandboxBuilder::shared_mem_size`, the size of the region that guest
+  addresses passed to `mapped_file_cow` must avoid.
 * Namespaced application metadata on immutable snapshots.
 * Per-direction virtqueue configuration through `SandboxConfiguration` and
   `SandboxBuilder`, with allocations included in scratch sizing.
