@@ -257,8 +257,8 @@ impl SandboxBuilder {
     /// [`Self::mapped_file_cow`] must lie outside it.
     ///
     /// The size depends on the guest binary and on the memory settings, so
-    /// this lays out guest memory to compute it and discards the result. Call
-    /// it once, after the memory settings are final.
+    /// this loads the guest binary and lays out guest memory to compute it.
+    /// Call it once, after the memory settings are final.
     pub fn shared_mem_size(&self) -> Result<usize> {
         use crate::mem::shared_mem::SharedMemory;
 
@@ -276,7 +276,7 @@ impl SandboxBuilder {
                         permissions: *flags,
                     }),
                 };
-                Ok(Snapshot::from_env(env, self.cfg)?.memory().mem_size())
+                Snapshot::mem_size_for_env(env, self.cfg)
             }
         }
     }
@@ -556,6 +556,20 @@ mod tests {
                 .unwrap();
 
         assert_eq!(reported, uninit.shared_mem_size());
+    }
+
+    #[test]
+    fn shared_mem_size_handles_multi_gigabyte_layouts() {
+        let path = simple_guest_as_string().unwrap();
+        let heap = 4 * 1024 * 1024 * 1024u64;
+
+        let size = SandboxBuilder::from_file(&path)
+            .heap_size(heap)
+            .scratch_size(16 * 1024 * 1024)
+            .shared_mem_size()
+            .unwrap();
+
+        assert!(size as u64 > heap);
     }
 
     #[test]
