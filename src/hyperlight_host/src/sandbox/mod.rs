@@ -11,7 +11,14 @@ pub(crate) mod file_mapping;
 pub(crate) mod host_funcs;
 /// Functionality for dealing with initialized sandboxes that can
 /// call 0 or more guest functions
-pub mod initialized_multi_use;
+mod initialized;
+/// Deprecated path for the items in the `initialized` module.
+#[deprecated(since = "0.18.0", note = "use hyperlight_host::sandbox")]
+pub mod initialized_multi_use {
+    #[allow(deprecated)]
+    pub use super::initialized::MultiUseSandbox;
+    pub use super::initialized::{PtRootFinder, Sandbox, SandboxStatus};
+}
 pub(crate) mod outb;
 /// Functionality for creating uninitialized sandboxes, manipulating them,
 /// and converting them to initialized sandboxes.
@@ -36,9 +43,9 @@ pub use callable::Callable;
 pub use config::SandboxConfiguration;
 /// Re-export for the deprecated `MultiUseSandbox` name
 #[allow(deprecated)]
-pub use initialized_multi_use::MultiUseSandbox;
+pub use initialized::MultiUseSandbox;
 /// Re-export for the `Sandbox` type
-pub use initialized_multi_use::{PtRootFinder, Sandbox, SandboxStatus};
+pub use initialized::{PtRootFinder, Sandbox, SandboxStatus};
 /// Re-export for `GuestBinary` type
 pub use uninitialized::GuestBinary;
 /// Re-export for `UninitializedSandbox` type

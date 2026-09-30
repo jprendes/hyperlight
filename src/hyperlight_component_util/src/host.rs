@@ -408,7 +408,7 @@ fn emit_component<'a, 'b, 'c>(s: &'c mut State<'a, 'b>, wn: WitName, ct: &'c Com
             #(#exports)*
         }
         impl #ns::#r#trait<::hyperlight_common::component::Positive> for ::hyperlight_host::sandbox::UninitializedSandbox {
-            type Exports<I: #ns::#import_trait<::hyperlight_common::component::Negative> + ::std::marker::Send> = #wrapper_name<I, ::hyperlight_host::sandbox::initialized_multi_use::Sandbox>;
+            type Exports<I: #ns::#import_trait<::hyperlight_common::component::Negative> + ::std::marker::Send> = #wrapper_name<I, ::hyperlight_host::sandbox::Sandbox>;
             fn instantiate<I: #ns::#import_trait<::hyperlight_common::component::Negative> + ::std::marker::Send + 'static>(mut self, i: I) -> <::hyperlight_common::component::Positive as ::hyperlight_common::component::Positivity>::CallResult<Self::Exports<I>> {
                 let rts = register_host_functions(&mut self, i)?;
                 let sb = self.evolve()?;

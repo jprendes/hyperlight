@@ -1051,12 +1051,11 @@ mod tests {
             TEST_LOGGER.clear_log_calls();
             TEST_LOGGER.set_max_level(log::LevelFilter::Info);
 
-            let mut valid_binary_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-            valid_binary_path.push("src");
-            valid_binary_path.push("sandbox");
-            valid_binary_path.push("initialized.rs");
+            // An existing file that is never a valid guest binary.
+            let mut invalid_binary_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            invalid_binary_path.push("Cargo.toml");
 
-            let sbox = UninitializedSandbox::new(GuestBinary::FilePath(valid_binary_path), None);
+            let sbox = UninitializedSandbox::new(GuestBinary::FilePath(invalid_binary_path), None);
             assert!(sbox.is_err());
 
             // There should be 2 calls this time when we change to the log
@@ -1076,11 +1075,7 @@ mod tests {
 
             let logcall = TEST_LOGGER.get_log_call(1).unwrap();
             assert_eq!(Level::Error, logcall.level);
-            assert!(
-                logcall
-                    .args
-                    .starts_with("error=Error(\"GuestBinary not found:")
-            );
+            assert!(logcall.args.starts_with("error=PEFileProcessingFailure"));
             assert_eq!("hyperlight_host::sandbox::uninitialized", logcall.target);
         }
         {
