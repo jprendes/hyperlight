@@ -15,27 +15,27 @@ use sha2::{Digest as _, Sha256};
 use crate::func::Registerable;
 use crate::mem::shared_mem::SharedMemory;
 use crate::sandbox::snapshot::{OciDigest, OciReference, OciTag, Snapshot};
-use crate::{GuestBinary, HostFunctions, MultiUseSandbox, SandboxBuilder, UninitializedSandbox};
+use crate::{GuestBinary, HostFunctions, Sandbox, SandboxBuilder, UninitializedSandbox};
 
-fn create_test_sandbox() -> MultiUseSandbox {
+fn create_test_sandbox() -> Sandbox {
     let path = simple_guest_as_pathbuf();
     SandboxBuilder::from_file(path).build().unwrap()
 }
 
-fn create_c_test_sandbox() -> MultiUseSandbox {
+fn create_c_test_sandbox() -> Sandbox {
     let path = c_simple_guest_as_pathbuf();
     SandboxBuilder::from_file(path).build().unwrap()
 }
 
-fn random_sequence(sandbox: &mut MultiUseSandbox) -> [i32; 4] {
+fn random_sequence(sandbox: &mut Sandbox) -> [i32; 4] {
     std::array::from_fn(|_| sandbox.call("NextRandom", ()).unwrap())
 }
 
-fn random_long_sequence(sandbox: &mut MultiUseSandbox) -> [i64; 4] {
+fn random_long_sequence(sandbox: &mut Sandbox) -> [i64; 4] {
     std::array::from_fn(|_| sandbox.call("NextRandomLong", ()).unwrap())
 }
 
-fn libc_rng_reseed_request(sandbox: &MultiUseSandbox) -> u64 {
+fn libc_rng_reseed_request(sandbox: &Sandbox) -> u64 {
     let scratch_size = sandbox.mem_mgr.scratch_mem.mem_size();
     sandbox
         .mem_mgr
@@ -130,8 +130,7 @@ fn find_transport_blob(oci_dir: &std::path::Path) -> std::path::PathBuf {
 #[test]
 fn from_snapshot_already_initialized_in_memory() {
     let snapshot = create_snapshot();
-    let mut sbox2 =
-        MultiUseSandbox::from_snapshot(snapshot, HostFunctions::default(), None).unwrap();
+    let mut sbox2 = Sandbox::from_snapshot(snapshot, HostFunctions::default(), None).unwrap();
     let result: i32 = sbox2.call("GetStatic", ()).unwrap();
     assert_eq!(result, 0);
 }
@@ -143,8 +142,7 @@ fn from_snapshot_in_memory_pre_init() {
         crate::sandbox::SandboxConfiguration::default(),
     )
     .unwrap();
-    let mut sbox =
-        MultiUseSandbox::from_snapshot(Arc::new(snap), HostFunctions::default(), None).unwrap();
+    let mut sbox = Sandbox::from_snapshot(Arc::new(snap), HostFunctions::default(), None).unwrap();
     assert_eq!(libc_rng_reseed_request(&sbox), 0);
     let result: i32 = sbox.call("GetStatic", ()).unwrap();
     assert_eq!(result, 0);
@@ -203,7 +201,7 @@ fn round_trip_save_load_call() {
 
     let loaded = Snapshot::checked_load(&oci, OciTag::new("latest").unwrap()).unwrap();
     let mut sbox2 =
-        MultiUseSandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
+        Sandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
 
     let result: String = sbox2.call("Echo", "hello\n".to_string()).unwrap();
     assert_eq!(result, "hello\n");
@@ -291,7 +289,7 @@ fn save_self_heals_same_length_wrong_content_snapshot_blob() {
     // descriptor digest.
     let loaded = Snapshot::checked_load(&oci, OciTag::new("latest").unwrap()).unwrap();
     let mut sbox2 =
-        MultiUseSandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
+        Sandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
     let result: String = sbox2.call("Echo", "hello\n".to_string()).unwrap();
     assert_eq!(result, "hello\n");
 }
@@ -469,7 +467,7 @@ fn disk_snapshot_non_superset_guest_msrs_rejected() {
     snap.save(&path, &OciTag::new("latest").unwrap()).unwrap();
     let loaded = Arc::new(Snapshot::checked_load(&path, OciTag::new("latest").unwrap()).unwrap());
 
-    let err = MultiUseSandbox::from_snapshot(loaded.clone(), HostFunctions::default(), None)
+    let err = Sandbox::from_snapshot(loaded.clone(), HostFunctions::default(), None)
         .expect_err("loading a snapshot MSR the destination cannot restore must fail");
     assert!(
         format!("{err:?}").contains("InvalidSnapshotMsrIndex"),
@@ -523,8 +521,7 @@ fn restore_from_loaded_snapshot() {
         .unwrap();
 
     let loaded = Arc::new(Snapshot::checked_load(&path, OciTag::new("latest").unwrap()).unwrap());
-    let mut sbox2 =
-        MultiUseSandbox::from_snapshot(loaded.clone(), HostFunctions::default(), None).unwrap();
+    let mut sbox2 = Sandbox::from_snapshot(loaded.clone(), HostFunctions::default(), None).unwrap();
 
     sbox2.call::<i32>("AddToStatic", 5i32).unwrap();
     assert_eq!(sbox2.call::<i32>("GetStatic", ()).unwrap(), 5);
@@ -644,7 +641,7 @@ fn restore_across_independent_oci_loads_succeeds() {
     let loaded1 = Arc::new(Snapshot::checked_load(&p1, OciTag::new("latest").unwrap()).unwrap());
     let loaded2 = Arc::new(Snapshot::checked_load(&p2, OciTag::new("latest").unwrap()).unwrap());
 
-    let mut sbox = MultiUseSandbox::from_snapshot(loaded2, HostFunctions::default(), None).unwrap();
+    let mut sbox = Sandbox::from_snapshot(loaded2, HostFunctions::default(), None).unwrap();
     sbox.restore(loaded1).unwrap();
     assert_eq!(sbox.call::<i32>("GetStatic", ()).unwrap(), 0);
 }
@@ -673,8 +670,7 @@ fn cow_does_not_mutate_backing_file() {
     {
         let loaded = Snapshot::checked_load(&path, OciTag::new("latest").unwrap()).unwrap();
         let mut sbox =
-            MultiUseSandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None)
-                .unwrap();
+            Sandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
         sbox.call::<i32>("AddToStatic", 99).unwrap();
     }
 
@@ -937,9 +933,9 @@ fn call_snapshot_without_sregs_rejected() {
 // Host-function validation. The loaded sandbox's `HostFunctions` must
 // be a superset (by name and signature) of those recorded in the snapshot.
 
-/// Build a `MultiUseSandbox` with the default host functions plus a
+/// Build a `Sandbox` with the default host functions plus a
 /// custom `Add(i32, i32) -> i32`.
-fn create_sandbox_with_custom_host_funcs() -> MultiUseSandbox {
+fn create_sandbox_with_custom_host_funcs() -> Sandbox {
     let path = simple_guest_as_pathbuf();
     SandboxBuilder::from_file(path)
         .host_function("Add", |a: i32, b: i32| Ok(a + b))
@@ -965,8 +961,7 @@ fn from_snapshot_accepts_matching_host_functions() {
 
     let loaded = Snapshot::checked_load(&path, OciTag::new("latest").unwrap()).unwrap();
     let mut sbox2 =
-        MultiUseSandbox::from_snapshot(Arc::new(loaded), host_funcs_with_matching_add(), None)
-            .unwrap();
+        Sandbox::from_snapshot(Arc::new(loaded), host_funcs_with_matching_add(), None).unwrap();
     assert_eq!(sbox2.call::<i32>("GetStatic", ()).unwrap(), 0);
 }
 
@@ -981,7 +976,7 @@ fn from_snapshot_rejects_missing_host_function() {
     snap.save(&path, &OciTag::new("latest").unwrap()).unwrap();
 
     let loaded = Snapshot::checked_load(&path, OciTag::new("latest").unwrap()).unwrap();
-    let err = MultiUseSandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None)
+    let err = Sandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None)
         .expect_err("from_snapshot must reject a HostFunctions set missing `Add`");
     let msg = format!("{}", err);
     assert!(
@@ -1006,7 +1001,7 @@ fn from_snapshot_rejects_signature_mismatch() {
         .unwrap();
 
     let loaded = Snapshot::checked_load(&path, OciTag::new("latest").unwrap()).unwrap();
-    let err = MultiUseSandbox::from_snapshot(Arc::new(loaded), hf, None)
+    let err = Sandbox::from_snapshot(Arc::new(loaded), hf, None)
         .expect_err("from_snapshot must reject a signature mismatch on Add");
     let msg = format!("{}", err);
     assert!(
@@ -1031,7 +1026,7 @@ fn from_snapshot_accepts_extra_host_functions() {
         .unwrap();
 
     let loaded = Snapshot::checked_load(&path, OciTag::new("latest").unwrap()).unwrap();
-    let mut sbox2 = MultiUseSandbox::from_snapshot(Arc::new(loaded), hf, None).unwrap();
+    let mut sbox2 = Sandbox::from_snapshot(Arc::new(loaded), hf, None).unwrap();
     assert_eq!(sbox2.call::<i32>("GetStatic", ()).unwrap(), 0);
 }
 
@@ -1052,7 +1047,7 @@ fn from_snapshot_accepts_zero_arg_host_function() {
     hf.register_host_function("Zero", || Ok(7i64)).unwrap();
 
     let loaded = Snapshot::checked_load(&path, OciTag::new("latest").unwrap()).unwrap();
-    let _sbox2 = MultiUseSandbox::from_snapshot(Arc::new(loaded), hf, None)
+    let _sbox2 = Sandbox::from_snapshot(Arc::new(loaded), hf, None)
         .expect("zero-arg host function must round-trip through OCI");
 }
 
@@ -2188,7 +2183,7 @@ fn manifest_and_index_annotations_tolerated() {
 
     let loaded = Snapshot::checked_load(&path, OciTag::new("latest").unwrap()).unwrap();
     let mut sbox2 =
-        MultiUseSandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
+        Sandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
     assert_eq!(sbox2.call::<i32>("GetStatic", ()).unwrap(), 0);
 }
 
@@ -2396,7 +2391,7 @@ fn load_round_trips() {
 
     let loaded = Snapshot::load(&path, OciTag::new("latest").unwrap()).unwrap();
     let mut sbox2 =
-        MultiUseSandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
+        Sandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
     let result: String = sbox2.call("Echo", "hi\n".to_string()).unwrap();
     assert_eq!(result, "hi\n");
 }
@@ -3065,7 +3060,7 @@ fn save_replaces_symlink_snapshot_blob_with_regular_file() {
 
     let loaded = Snapshot::checked_load(&path, OciTag::new("latest").unwrap()).unwrap();
     let mut sbox =
-        MultiUseSandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
+        Sandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
     let result: String = sbox.call("Echo", "hello\n".to_string()).unwrap();
     assert_eq!(result, "hello\n");
 }
@@ -3154,8 +3149,7 @@ fn persisted_non_default_layout_loads_and_runs() {
     assert_eq!(loaded.layout().heap_size(), 0x40_000);
     assert_eq!(loaded.layout().get_scratch_size(), 0x90_000);
 
-    let mut restored =
-        MultiUseSandbox::from_snapshot(loaded, HostFunctions::default(), None).unwrap();
+    let mut restored = Sandbox::from_snapshot(loaded, HostFunctions::default(), None).unwrap();
     assert_eq!(restored.call::<i32>("GetStatic", ()).unwrap(), 42);
     let large = "x".repeat(0x5000);
     assert_eq!(
@@ -3245,8 +3239,7 @@ fn round_trip_preserves_host_function_signatures() {
     );
     // Loading and using the snapshot must accept the same signature.
     let loaded = Snapshot::checked_load(&path, OciTag::new("latest").unwrap()).unwrap();
-    let _ = MultiUseSandbox::from_snapshot(Arc::new(loaded), host_funcs_with_matching_add(), None)
-        .unwrap();
+    let _ = Sandbox::from_snapshot(Arc::new(loaded), host_funcs_with_matching_add(), None).unwrap();
 }
 
 #[test]
@@ -3266,8 +3259,7 @@ fn snapshot_with_no_host_functions_round_trips() {
     assert!(cfg["host_functions"].as_array().unwrap().is_empty());
 
     let loaded = Snapshot::load(&path, OciTag::new("latest").unwrap()).unwrap();
-    let _ =
-        MultiUseSandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
+    let _ = Sandbox::from_snapshot(Arc::new(loaded), HostFunctions::default(), None).unwrap();
 }
 
 // Snapshot lineage and restore semantics. `restore` accepts snapshots
@@ -3320,8 +3312,7 @@ fn separate_oci_loads_are_mutually_restore_compatible() {
     let s_x = Arc::new(Snapshot::checked_load(&path, OciTag::new("v1").unwrap()).unwrap());
     let s_y = Arc::new(Snapshot::checked_load(&path, OciTag::new("v1").unwrap()).unwrap());
 
-    let mut sbox_x =
-        MultiUseSandbox::from_snapshot(s_x.clone(), HostFunctions::default(), None).unwrap();
+    let mut sbox_x = Sandbox::from_snapshot(s_x.clone(), HostFunctions::default(), None).unwrap();
     sbox_x.restore(s_y.clone()).unwrap();
     assert_eq!(sbox_x.call::<i32>("GetStatic", ()).unwrap(), 0);
 
@@ -3340,8 +3331,7 @@ fn oci_loaded_snapshot_supports_full_lifecycle() {
     snap.save(&path, &OciTag::new("v1").unwrap()).unwrap();
 
     let loaded = Arc::new(Snapshot::checked_load(&path, OciTag::new("v1").unwrap()).unwrap());
-    let mut sbox =
-        MultiUseSandbox::from_snapshot(loaded.clone(), HostFunctions::default(), None).unwrap();
+    let mut sbox = Sandbox::from_snapshot(loaded.clone(), HostFunctions::default(), None).unwrap();
 
     sbox.call::<i32>("AddToStatic", 1i32).unwrap();
     let s1 = sbox.snapshot().unwrap();
@@ -3554,7 +3544,7 @@ fn save_new_tag_into_loaded_layout_preserves_live_mapping() {
 
     // A sandbox built on the live mapping still restores cleanly.
     let mut live =
-        MultiUseSandbox::from_snapshot(loaded_a.clone(), HostFunctions::default(), None).unwrap();
+        Sandbox::from_snapshot(loaded_a.clone(), HostFunctions::default(), None).unwrap();
     live.call::<i32>("AddToStatic", 7i32).unwrap();
     assert_eq!(live.call::<i32>("GetStatic", ()).unwrap(), 7);
     live.restore(loaded_a).unwrap();
@@ -3634,9 +3624,8 @@ fn random_guest_libc_rng_reseeds_from_snapshot() {
     let snapshot = sandbox.snapshot().unwrap();
 
     let mut first =
-        MultiUseSandbox::from_snapshot(snapshot.clone(), HostFunctions::default(), None).unwrap();
-    let mut second =
-        MultiUseSandbox::from_snapshot(snapshot, HostFunctions::default(), None).unwrap();
+        Sandbox::from_snapshot(snapshot.clone(), HostFunctions::default(), None).unwrap();
+    let mut second = Sandbox::from_snapshot(snapshot, HostFunctions::default(), None).unwrap();
 
     assert_ne!(random_sequence(&mut first), random_sequence(&mut second));
 }
@@ -3647,9 +3636,8 @@ fn guest_libc_rng_random_reseeds_from_snapshot() {
     let snapshot = sandbox.snapshot().unwrap();
 
     let mut first =
-        MultiUseSandbox::from_snapshot(snapshot.clone(), HostFunctions::default(), None).unwrap();
-    let mut second =
-        MultiUseSandbox::from_snapshot(snapshot, HostFunctions::default(), None).unwrap();
+        Sandbox::from_snapshot(snapshot.clone(), HostFunctions::default(), None).unwrap();
+    let mut second = Sandbox::from_snapshot(snapshot, HostFunctions::default(), None).unwrap();
 
     assert_ne!(
         random_long_sequence(&mut first),
@@ -3713,10 +3701,8 @@ fn persisted_guest_libc_rng_snapshot_reseeds_each_instance() {
         .unwrap();
 
     let loaded = Arc::new(Snapshot::checked_load(&path, OciTag::new("latest").unwrap()).unwrap());
-    let mut first =
-        MultiUseSandbox::from_snapshot(loaded.clone(), HostFunctions::default(), None).unwrap();
-    let mut second =
-        MultiUseSandbox::from_snapshot(loaded, HostFunctions::default(), None).unwrap();
+    let mut first = Sandbox::from_snapshot(loaded.clone(), HostFunctions::default(), None).unwrap();
+    let mut second = Sandbox::from_snapshot(loaded, HostFunctions::default(), None).unwrap();
 
     assert_ne!(random_sequence(&mut first), random_sequence(&mut second));
 }

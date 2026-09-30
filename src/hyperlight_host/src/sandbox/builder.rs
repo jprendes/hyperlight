@@ -19,9 +19,7 @@ use crate::sandbox::config::GuestMsrError;
 use crate::sandbox::host_funcs::FunctionEntry;
 use crate::sandbox::snapshot::Snapshot;
 use crate::sandbox::uninitialized::{GuestBlob, GuestEnvironment};
-use crate::{
-    GuestBinary, HostFunctions, MultiUseSandbox as Sandbox, Result, UninitializedSandbox, new_error,
-};
+use crate::{GuestBinary, HostFunctions, Result, Sandbox, UninitializedSandbox, new_error};
 
 /// What a [`SandboxBuilder`] builds the sandbox from.
 enum Source {

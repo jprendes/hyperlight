@@ -229,7 +229,7 @@ To selectively disable this feature for a specific sandbox, call `guest_core_dum
 
 ## Creating a dump on demand
 
-You can also create a core dump of the current state of the guest on demand by calling the `generate_crashdump` method on the `InitializedMultiUseSandbox` instance. This can be useful for debugging issues in the guest that do not cause crashes (e.g., a guest function that does not return).
+You can also create a core dump of the current state of the guest on demand by calling the `generate_crashdump` method on the `Sandbox` instance. This can be useful for debugging issues in the guest that do not cause crashes (e.g., a guest function that does not return).
 
 This is only available when the `crashdump` feature is enabled and then only if the sandbox
 is also configured to allow core dumps (which is the default behavior).
@@ -243,10 +243,10 @@ sudo gdb -p <pid_of_your_process>
 (gdb) info threads
 # find the thread that is running the guest function you want to debug
 (gdb) thread <thread_number>
-# switch to the frame where you have access to your MultiUseSandbox instance
+# switch to the frame where you have access to your Sandbox instance
 (gdb) backtrace
 (gdb) frame <frame_number>
-# get the pointer to your MultiUseSandbox instance
+# get the pointer to your Sandbox instance
 # Get the sandbox pointer
 (gdb) print sandbox
 # Call the crashdump function with the pointer

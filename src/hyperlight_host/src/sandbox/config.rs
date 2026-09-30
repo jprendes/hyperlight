@@ -196,8 +196,8 @@ impl SandboxConfiguration {
     /// Declares the MSRs the guest depends on.
     ///
     /// A declared MSR's value is part of the sandbox's saved state: captured by
-    /// [`MultiUseSandbox::snapshot`](crate::MultiUseSandbox::snapshot) and written
-    /// back on [`MultiUseSandbox::restore`](crate::MultiUseSandbox::restore). Every
+    /// [`Sandbox::snapshot`](crate::Sandbox::snapshot) and written
+    /// back on [`Sandbox::restore`](crate::Sandbox::restore). Every
     /// MSR you do not declare is reset to a clean default on each restore.
     ///
     /// If this method is not called, only a small core of essential CPU state

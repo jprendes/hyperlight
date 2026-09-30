@@ -11,7 +11,7 @@ use std::sync::Arc;
 use hyperlight_host::func::Registerable;
 use hyperlight_host::sandbox::SandboxConfiguration;
 use hyperlight_host::sandbox::snapshot::Snapshot;
-use hyperlight_host::{GuestBinary, MultiUseSandbox, UninitializedSandbox};
+use hyperlight_host::{GuestBinary, Sandbox, UninitializedSandbox};
 use hyperlight_testing::simple_guest_as_pathbuf;
 
 /// Heap pattern length used by the golden. Small enough to
@@ -55,7 +55,7 @@ pub(crate) fn generate() -> Arc<Snapshot> {
 /// before snapshotting. Each call lands a specific bit of state
 /// (BSS, heap, host-call wiring) that one of the per-surface
 /// checks then asserts on after the golden is loaded.
-fn run_canonical_calls(sbox: &mut MultiUseSandbox) {
+fn run_canonical_calls(sbox: &mut Sandbox) {
     let bumped: i32 = sbox
         .call("AddToStatic", CALL_COUNTER_BUMP)
         .expect("AddToStatic");

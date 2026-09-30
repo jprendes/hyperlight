@@ -9,7 +9,7 @@
 //! and host-guest communication.
 //!
 //! The primary entry point is [`SandboxBuilder`], which produces a
-//! [`MultiUseSandbox`] for executing guest functions.
+//! [`Sandbox`] for executing guest functions.
 //!
 //! ## Guest Requirements
 //!
@@ -73,17 +73,20 @@ pub(crate) mod testing;
 pub use error::HyperlightError;
 /// The re-export for the `is_hypervisor_present` type
 pub use hypervisor::virtual_machine::is_hypervisor_present;
+/// Deprecated name for [`Sandbox`].
+#[allow(deprecated)]
+pub use sandbox::MultiUseSandbox;
 /// A sandbox that can call be used to make multiple calls to guest functions,
 /// and otherwise reused multiple times
-pub use sandbox::MultiUseSandbox;
-/// The lifecycle state of a [`MultiUseSandbox`].
+pub use sandbox::Sandbox;
+/// The lifecycle state of a [`Sandbox`].
 pub use sandbox::SandboxStatus;
 /// The re-export for the `UninitializedSandbox` type
 pub use sandbox::UninitializedSandbox;
 /// The re-export for the `SandboxBuilder` type
 pub use sandbox::builder::SandboxBuilder;
 /// A collection of host functions that can be supplied to a sandbox
-/// constructor (e.g. [`MultiUseSandbox::from_snapshot`]).
+/// constructor (e.g. [`Sandbox::from_snapshot`]).
 pub use sandbox::host_funcs::HostFunctions;
 /// The re-export for the `GuestBinary` type
 pub use sandbox::uninitialized::GuestBinary;

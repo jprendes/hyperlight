@@ -15,7 +15,7 @@ use hyperlight_common::flatbuffer_wrappers::util::estimate_flatbuffer_capacity;
 use hyperlight_common::transport::ExternalValues;
 use hyperlight_common::vmem::PAGE_SIZE;
 use hyperlight_host::mem::shared_mem::ExclusiveSharedMemory;
-use hyperlight_host::sandbox::{MultiUseSandbox, SandboxConfiguration, UninitializedSandbox};
+use hyperlight_host::sandbox::{Sandbox, SandboxConfiguration, UninitializedSandbox};
 use hyperlight_host::{GuestBinary, SandboxBuilder};
 use hyperlight_testing::sandbox_sizes::{LARGE_HEAP_SIZE, MEDIUM_HEAP_SIZE, SMALL_HEAP_SIZE};
 use hyperlight_testing::{c_simple_guest_as_pathbuf, simple_guest_as_pathbuf};
@@ -62,7 +62,7 @@ impl SandboxSize {
     }
 }
 
-fn create_multiuse_sandbox_with_size(size: SandboxSize) -> MultiUseSandbox {
+fn create_multiuse_sandbox_with_size(size: SandboxSize) -> Sandbox {
     size.builder().build().unwrap()
 }
 
@@ -99,7 +99,7 @@ fn sandbox_lifecycle_benchmark(c: &mut Criterion) {
         );
     }
 
-    // Isolates the cost of building a MultiUseSandbox from an
+    // Isolates the cost of building a Sandbox from an
     // already-resident Snapshot. The Snapshot is loaded outside the
     // timed region.
     for size in SandboxSize::all() {
@@ -317,7 +317,7 @@ fn bench_sandbox_from_snapshot(b: &mut criterion::Bencher, size: SandboxSize) {
     // Drop is not included.
     b.iter_batched(
         || (),
-        |_| MultiUseSandbox::from_snapshot(loaded.clone(), HostFunctions::default(), None).unwrap(),
+        |_| Sandbox::from_snapshot(loaded.clone(), HostFunctions::default(), None).unwrap(),
         criterion::BatchSize::PerIteration,
     );
 }
@@ -698,7 +698,7 @@ fn snapshot_file_benchmark(c: &mut Criterion) {
                 |_| {
                     let loaded =
                         Snapshot::checked_load(&snap_path, OciTag::new("latest").unwrap()).unwrap();
-                    let mut sbox = MultiUseSandbox::from_snapshot(
+                    let mut sbox = Sandbox::from_snapshot(
                         std::sync::Arc::new(loaded),
                         HostFunctions::default(),
                         None,
@@ -723,7 +723,7 @@ fn snapshot_file_benchmark(c: &mut Criterion) {
                     |_| {
                         let loaded =
                             Snapshot::load(&snap_path, OciTag::new("latest").unwrap()).unwrap();
-                        let mut sbox = MultiUseSandbox::from_snapshot(
+                        let mut sbox = Sandbox::from_snapshot(
                             std::sync::Arc::new(loaded),
                             HostFunctions::default(),
                             None,

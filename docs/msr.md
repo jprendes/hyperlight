@@ -5,7 +5,7 @@
 A snapshot represents the state of a VM at a point in time. This includes MSR
 state that can affect later execution.
 
-After `MultiUseSandbox::restore`, the destination sandbox's MSR state must match
+After `Sandbox::restore`, the destination sandbox's MSR state must match
 the supplied snapshot, regardless of prior execution in the sandbox.
 
 ## How snapshot and restore work

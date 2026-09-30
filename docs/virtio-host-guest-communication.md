@@ -327,7 +327,7 @@ memory. Guest producer and pool bookkeeping is normal guest state, while ring
 and pool bytes live in scratch. Snapshot capture needs a canonical transport
 state.
 
-`MultiUseSandbox` tracks whether queue traffic occurred after the last
+`Sandbox` tracks whether queue traffic occurred after the last
 canonical boundary. A cached or clean snapshot needs no VM entry. A dirty
 snapshot uses this flow:
 

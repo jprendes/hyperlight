@@ -45,16 +45,16 @@ impl Registerable for UninitializedSandbox {
 }
 
 /// Allow registering host functions on an already-evolved
-/// [`crate::MultiUseSandbox`].
+/// [`crate::Sandbox`].
 ///
 /// The primary entry point for host-function registration is
 /// [`crate::SandboxBuilder::host_function`] — that's the lifecycle
 /// phase where the guest hasn't yet been allowed to issue host calls.
-/// There are, however, cases where a `MultiUseSandbox` is obtained
+/// There are, however, cases where a `Sandbox` is obtained
 /// without going through the builder:
 ///
 /// - Sandboxes loaded from a persisted snapshot.
-/// - Any future API that yields a `MultiUseSandbox` directly.
+/// - Any future API that yields a `Sandbox` directly.
 ///
 /// In those cases the caller never had a chance to register up front,
 /// so we expose the same trait implementation here for late
@@ -63,7 +63,7 @@ impl Registerable for UninitializedSandbox {
 /// time, so inserting into the registry after the sandbox is built is
 /// semantically safe as long as the first host-function invocation
 /// happens after registration completes.
-impl Registerable for crate::MultiUseSandbox {
+impl Registerable for crate::Sandbox {
     fn register_host_function<Args: ParameterTuple, Output: SupportedReturnType>(
         &mut self,
         name: &str,

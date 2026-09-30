@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 
 use hyperlight_common::component::{Negative, Positive};
 use hyperlight_common::resource::BorrowedResourceGuard;
-use hyperlight_host::{GuestBinary, MultiUseSandbox, UninitializedSandbox};
+use hyperlight_host::{GuestBinary, Sandbox, UninitializedSandbox};
 use hyperlight_testing::{
     c_simple_guest_as_pathbuf, simple_guest_as_pathbuf, wit_guest_as_pathbuf,
 };
@@ -275,11 +275,11 @@ impl test::wit::TestImports<Negative> for Host {
     }
 }
 
-fn sb() -> TestSandbox<Host, MultiUseSandbox> {
+fn sb() -> TestSandbox<Host, Sandbox> {
     sb_from_guest(wit_guest_as_pathbuf())
 }
 
-fn sb_from_guest(path: PathBuf) -> TestSandbox<Host, MultiUseSandbox> {
+fn sb_from_guest(path: PathBuf) -> TestSandbox<Host, Sandbox> {
     let guest_path = GuestBinary::FilePath(path);
     let uninit = UninitializedSandbox::new(guest_path, None).unwrap();
     test::wit::Test::instantiate(uninit, Host {}).unwrap()

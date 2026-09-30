@@ -114,7 +114,7 @@ struct SnapshotState {
 
     /// Names and signatures of host functions registered on the
     /// sandbox at the time this snapshot was taken. Used by
-    /// [`crate::MultiUseSandbox::from_snapshot`] to reject a
+    /// [`crate::Sandbox::from_snapshot`] to reject a
     /// `HostFunctions` set that is missing required functions or
     /// has mismatched signatures.
     host_functions: HostFunctionDetails,

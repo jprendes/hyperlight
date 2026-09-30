@@ -34,8 +34,11 @@ pub(crate) mod trace;
 pub use callable::Callable;
 /// Re-export for `SandboxConfiguration` type
 pub use config::SandboxConfiguration;
-/// Re-export for the `MultiUseSandbox` type
-pub use initialized_multi_use::{MultiUseSandbox, PtRootFinder, SandboxStatus};
+/// Re-export for the deprecated `MultiUseSandbox` name
+#[allow(deprecated)]
+pub use initialized_multi_use::MultiUseSandbox;
+/// Re-export for the `Sandbox` type
+pub use initialized_multi_use::{PtRootFinder, Sandbox, SandboxStatus};
 /// Re-export for `GuestBinary` type
 pub use uninitialized::GuestBinary;
 /// Re-export for `UninitializedSandbox` type
@@ -50,12 +53,24 @@ mod tests {
     use hyperlight_testing::simple_guest_as_pathbuf;
 
     use crate::sandbox::uninitialized::GuestBinary;
-    use crate::{MultiUseSandbox, UninitializedSandbox, new_error};
+    use crate::{Sandbox, UninitializedSandbox, new_error};
+
+    #[allow(deprecated)]
+    #[test]
+    fn multi_use_sandbox_is_a_sandbox_alias() {
+        fn accepts_sandbox(_: Option<Sandbox>) {}
+
+        let root_alias: Option<crate::MultiUseSandbox> = None;
+        accepts_sandbox(root_alias);
+
+        let module_alias: Option<crate::sandbox::MultiUseSandbox> = None;
+        accepts_sandbox(module_alias);
+    }
 
     #[test]
     fn check_create_and_use_sandbox_on_different_threads() {
         let unintializedsandbox_queue = Arc::new(ArrayQueue::<UninitializedSandbox>::new(10));
-        let sandbox_queue = Arc::new(ArrayQueue::<MultiUseSandbox>::new(10));
+        let sandbox_queue = Arc::new(ArrayQueue::<Sandbox>::new(10));
 
         for i in 0..10 {
             let simple_guest_path = simple_guest_as_pathbuf();

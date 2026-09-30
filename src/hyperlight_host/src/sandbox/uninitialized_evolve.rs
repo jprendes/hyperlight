@@ -17,10 +17,10 @@ use crate::sandbox::config::DebugInfo;
 use crate::sandbox::trace::MemTraceInfo;
 #[cfg(target_os = "linux")]
 use crate::signal_handlers::setup_signal_handlers;
-use crate::{MultiUseSandbox, Result, UninitializedSandbox};
+use crate::{Result, Sandbox, UninitializedSandbox};
 
 #[instrument(err(Debug), skip_all, parent = Span::current(), level = "Trace")]
-pub(super) fn evolve_impl_multi_use(u_sbox: UninitializedSandbox) -> Result<MultiUseSandbox> {
+pub(super) fn evolve_impl_multi_use(u_sbox: UninitializedSandbox) -> Result<Sandbox> {
     let max_guest_log_level = u_sbox.config.get_max_guest_log_level();
     let (mut hshm, gshm) = u_sbox.mgr.build()?;
 
@@ -86,7 +86,7 @@ pub(super) fn evolve_impl_multi_use(u_sbox: UninitializedSandbox) -> Result<Mult
     )
     .map_err(HyperlightVmError::Initialize)?;
 
-    let mut sbox = MultiUseSandbox::from_uninit(u_sbox.host_funcs, hshm, vm);
+    let mut sbox = Sandbox::from_uninit(u_sbox.host_funcs, hshm, vm);
 
     if let Some(log_level) = max_guest_log_level {
         sbox.log_level(log_level)?;
@@ -132,7 +132,7 @@ pub(crate) fn set_up_hypervisor_partition(
     // `Call(dispatch_addr)` after guest initialisation, losing the original value
     // that GDB needs to compute the PIE binary's load offset. The manager carries
     // it across that transition (and across snapshot save/restore), so it is
-    // correct for both the evolve path and `MultiUseSandbox::from_snapshot`.
+    // correct for both the evolve path and `Sandbox::from_snapshot`.
     #[cfg(crashdump)]
     let rt_cfg = {
         let mut rt_cfg = rt_cfg;

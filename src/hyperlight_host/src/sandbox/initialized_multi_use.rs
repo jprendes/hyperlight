@@ -28,7 +28,7 @@ use crate::metrics::{
 };
 use crate::{HyperlightError, Result, log_then_return};
 
-/// The lifecycle state of a [`MultiUseSandbox`].
+/// The lifecycle state of a [`Sandbox`].
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SandboxStatus {
     /// The sandbox can execute guest operations.
@@ -78,7 +78,7 @@ impl SandboxStatus {
 /// memory mappings can leave the sandbox
 /// [`Unrecoverable`](SandboxStatus::Unrecoverable). Further restore attempts and
 /// guest operations are rejected. The sandbox must be discarded.
-pub struct MultiUseSandbox {
+pub struct Sandbox {
     status: SandboxStatus,
     pub(crate) host_funcs: Arc<Mutex<FunctionRegistry>>,
     pub(crate) mem_mgr: SandboxMemoryManager<HostSharedMemory>,
@@ -96,9 +96,13 @@ pub struct MultiUseSandbox {
     max_guest_log_level: Option<LevelFilter>,
 }
 
+/// Deprecated name for [`Sandbox`].
+#[deprecated(since = "0.18.0", note = "use Sandbox")]
+pub type MultiUseSandbox = Sandbox;
+
 /// Callback for discovering page table roots from guest memory.
 ///
-/// Called during [`MultiUseSandbox::snapshot`] with:
+/// Called during [`Sandbox::snapshot`] with:
 /// - `snapshot_mem` - the sandbox's snapshot (shared) memory as a byte slice
 /// - `scratch_mem` - the sandbox's scratch memory as a byte slice
 /// - `root_pt_gpa` - the root page table GPA of the currently-executing
@@ -108,7 +112,7 @@ pub struct MultiUseSandbox {
 /// empty, only `root_pt_gpa` is used.
 pub type PtRootFinder = Box<dyn Fn(&[u8], &[u8], u64) -> Vec<u64> + Send>;
 
-impl MultiUseSandbox {
+impl Sandbox {
     fn check_ready(&self) -> Result<()> {
         match self.status {
             SandboxStatus::Ready => Ok(()),
@@ -123,7 +127,7 @@ impl MultiUseSandbox {
         }
     }
 
-    /// Move an `UninitializedSandbox` into a new `MultiUseSandbox` instance.
+    /// Move an `UninitializedSandbox` into a new `Sandbox` instance.
     ///
     /// This function is not equivalent to doing an `evolve` from uninitialized
     /// to initialized, and is purposely not exposed publicly outside the crate
@@ -133,7 +137,7 @@ impl MultiUseSandbox {
         host_funcs: Arc<Mutex<FunctionRegistry>>,
         mgr: SandboxMemoryManager<HostSharedMemory>,
         vm: HyperlightVm,
-    ) -> MultiUseSandbox {
+    ) -> Sandbox {
         // Initialization can log or call the host before the first guest call.
         let transport_dirty = matches!(mgr.next_action, super::snapshot::NextAction::Initialise(_));
 
@@ -168,7 +172,7 @@ impl MultiUseSandbox {
         self.pt_root_finder = Some(finder);
     }
 
-    /// Create a `MultiUseSandbox` directly from a [`Snapshot`],
+    /// Create a `Sandbox` directly from a [`Snapshot`],
     /// bypassing guest binary loading and initialization.
     ///
     /// This is useful for fast sandbox creation when a snapshot of
@@ -204,7 +208,7 @@ impl MultiUseSandbox {
     ///
     /// ```no_run
     /// # use std::sync::Arc;
-    /// # use hyperlight_host::{HostFunctions, MultiUseSandbox, SandboxBuilder};
+    /// # use hyperlight_host::{HostFunctions, Sandbox, SandboxBuilder};
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// // Create and initialize a sandbox the normal way
     /// let mut sandbox = SandboxBuilder::from_file("guest.bin").build()?;
@@ -213,7 +217,7 @@ impl MultiUseSandbox {
     /// let snapshot = sandbox.snapshot()?;
     ///
     /// // Create a new sandbox directly from the snapshot
-    /// let mut sandbox2 = MultiUseSandbox::from_snapshot(snapshot, HostFunctions::default(), None)?;
+    /// let mut sandbox2 = Sandbox::from_snapshot(snapshot, HostFunctions::default(), None)?;
     /// let result: i32 = sandbox2.call("GetValue", ())?;
     /// # Ok(())
     /// # }
@@ -223,12 +227,12 @@ impl MultiUseSandbox {
     ///
     /// ```no_run
     /// # use std::sync::Arc;
-    /// # use hyperlight_host::{HostFunctions, MultiUseSandbox};
+    /// # use hyperlight_host::{HostFunctions, Sandbox};
     /// # use hyperlight_host::sandbox::snapshot::{OciTag, Snapshot};
     /// # fn example() -> Result<(), Box<dyn std::error::Error>> {
     /// let tag = OciTag::new("latest")?;
     /// let snapshot = Arc::new(Snapshot::load("./guest_snapshot", tag)?);
-    /// let mut sandbox = MultiUseSandbox::from_snapshot(snapshot, HostFunctions::default(), None)?;
+    /// let mut sandbox = Sandbox::from_snapshot(snapshot, HostFunctions::default(), None)?;
     /// let result: String = sandbox.call("Echo", "hello".to_string())?;
     /// # Ok(())
     /// # }
@@ -359,7 +363,7 @@ impl MultiUseSandbox {
             hshm.restore_virtq(virtq)?;
         }
 
-        let mut sbox = MultiUseSandbox::from_uninit(host_funcs, hshm, vm);
+        let mut sbox = Sandbox::from_uninit(host_funcs, hshm, vm);
 
         if let Some(log_level) = max_guest_log_level {
             sbox.log_level(log_level)?;
@@ -371,10 +375,10 @@ impl MultiUseSandbox {
     /// Creates a snapshot of the sandbox's current memory state.
     ///
     /// The returned snapshot can be applied to any
-    /// [`MultiUseSandbox`] whose registered host functions are a
+    /// [`Sandbox`] whose registered host functions are a
     /// superset of those registered here at the time of capture. See
-    /// [`MultiUseSandbox::restore`] and
-    /// [`MultiUseSandbox::from_snapshot`] for the exact compatibility
+    /// [`Sandbox::restore`] and
+    /// [`Sandbox::from_snapshot`] for the exact compatibility
     /// rules and the error variants returned on mismatch.
     ///
     /// On x86_64, the snapshot saves a small core of essential CPU state plus
@@ -507,7 +511,7 @@ impl MultiUseSandbox {
     /// carrying the missing names and signature differences.
     ///
     /// On x86_64, this restores the MSR state captured by
-    /// [`MultiUseSandbox::snapshot`]:
+    /// [`Sandbox::snapshot`]:
     /// [`SandboxBuilder::guest_msrs`](crate::SandboxBuilder::guest_msrs)
     /// selects which MSRs are saved and restored.
     ///
@@ -1078,10 +1082,10 @@ impl MultiUseSandbox {
     /// (gdb) info threads
     /// # find the thread that is running the guest function you want to debug
     /// (gdb) thread <thread_number>
-    /// # switch to the frame where you have access to your MultiUseSandbox instance
+    /// # switch to the frame where you have access to your Sandbox instance
     /// (gdb) backtrace
     /// (gdb) frame <frame_number>
-    /// # get the pointer to your MultiUseSandbox instance
+    /// # get the pointer to your Sandbox instance
     /// # Get the sandbox pointer
     /// (gdb) print sandbox
     /// # Call the crashdump function
@@ -1159,7 +1163,7 @@ impl MultiUseSandbox {
     }
 }
 
-impl Callable for MultiUseSandbox {
+impl Callable for Sandbox {
     fn call<Output: SupportedReturnType>(
         &mut self,
         func_name: &str,
@@ -1170,14 +1174,14 @@ impl Callable for MultiUseSandbox {
     }
 }
 
-impl std::fmt::Debug for MultiUseSandbox {
+impl std::fmt::Debug for Sandbox {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("MultiUseSandbox").finish()
+        f.debug_struct("Sandbox").finish()
     }
 }
 
 /// Emit a warning for each memory-layout field in `caller` that
-/// disagrees with `snapshot`. Used by [`MultiUseSandbox::from_snapshot`]
+/// disagrees with `snapshot`. Used by [`Sandbox::from_snapshot`]
 /// to surface ignored caller-supplied layout values, since those
 /// fields are always taken from the snapshot.
 fn warn_on_layout_override(
@@ -1256,7 +1260,7 @@ mod tests {
     use crate::sandbox::SandboxConfiguration;
     use crate::sandbox::uninitialized::{GuestBlob, GuestEnvironment};
     use crate::{
-        GuestBinary, HyperlightError, MultiUseSandbox, Result, SandboxBuilder, SandboxStatus,
+        GuestBinary, HyperlightError, Result, Sandbox, SandboxBuilder, SandboxStatus,
         UninitializedSandbox,
     };
 
@@ -1275,7 +1279,7 @@ mod tests {
         assert!(SandboxStatus::Unrecoverable.is_unrecoverable());
     }
 
-    fn assert_virtq_attached(sbox: &MultiUseSandbox) {
+    fn assert_virtq_attached(sbox: &Sandbox) {
         assert!(sbox.mem_mgr.g2h_consumer.is_some());
         assert!(sbox.mem_mgr.h2g_consumer.is_some());
     }
@@ -1483,7 +1487,7 @@ mod tests {
         }
     }
 
-    /// Tests that evolving from MultiUseSandbox to MultiUseSandbox creates a new state
+    /// Tests that evolving from Sandbox to Sandbox creates a new state
     /// and restoring a snapshot from before evolving restores the previous state
     #[test]
     fn snapshot_evolve_restore_handles_state_correctly() {
@@ -2959,7 +2963,7 @@ mod tests {
     #[test]
     #[cfg(target_arch = "x86_64")]
     fn snapshot_restore_resets_xcr0() {
-        let mut sandbox: MultiUseSandbox = {
+        let mut sandbox: Sandbox = {
             let path = simple_guest_as_pathbuf();
             let u_sbox = UninitializedSandbox::new(GuestBinary::FilePath(path), None).unwrap();
             u_sbox.evolve().unwrap()
@@ -3026,9 +3030,9 @@ mod tests {
         }
     }
 
-    /// Helper: create a MultiUseSandbox from the simple guest with default config.
+    /// Helper: create a Sandbox from the simple guest with default config.
     #[cfg(feature = "trace_guest")]
-    fn sandbox_for_gva_tests() -> MultiUseSandbox {
+    fn sandbox_for_gva_tests() -> Sandbox {
         let path = simple_guest_as_pathbuf();
         SandboxBuilder::from_file(path).build().unwrap()
     }
@@ -3037,7 +3041,7 @@ mod tests {
     /// `ReadMappedBuffer(gva, len, false)` and from the host side via
     /// `read_guest_memory_by_gva`, then assert both views are identical.
     #[cfg(feature = "trace_guest")]
-    fn assert_gva_read_matches(sbox: &mut MultiUseSandbox, gva: u64, len: usize) {
+    fn assert_gva_read_matches(sbox: &mut Sandbox, gva: u64, len: usize) {
         // Guest reads via its own page tables
         let expected: Vec<u8> = sbox
             .call("ReadMappedBuffer", (gva, len as u64, true))
@@ -4460,7 +4464,7 @@ mod tests {
             }
         }
 
-        fn assert_omitted_msr_does_not_retain(sbox: &mut MultiUseSandbox, index: u32) {
+        fn assert_omitted_msr_does_not_retain(sbox: &mut Sandbox, index: u32) {
             let baseline = sbox.snapshot().unwrap();
             let original: u64 = match sbox.call("ReadMSR", index) {
                 Ok(value) => value,
@@ -4560,7 +4564,7 @@ mod tests {
         }
 
         fn assert_guest_msr_is_writable_and_restored(
-            sbox: &mut MultiUseSandbox,
+            sbox: &mut Sandbox,
             index: u32,
             sentinel: u64,
         ) {
@@ -4585,7 +4589,7 @@ mod tests {
             );
         }
 
-        fn assert_guest_counter_is_writable_and_restored(sbox: &mut MultiUseSandbox, index: u32) {
+        fn assert_guest_counter_is_writable_and_restored(sbox: &mut Sandbox, index: u32) {
             let baseline = sbox.snapshot().unwrap();
             let original: u64 = sbox.call("ReadMSR", index).unwrap();
             let jump = original.wrapping_add(1 << 60);
@@ -4607,11 +4611,7 @@ mod tests {
 
         /// Verifies that a guest MSR write faults or resets to its baseline.
         #[cfg(target_arch = "x86_64")]
-        fn assert_msr_write_does_not_survive_restore(
-            sbox: &mut MultiUseSandbox,
-            msr: u32,
-            sentinel: u64,
-        ) {
+        fn assert_msr_write_does_not_survive_restore(sbox: &mut Sandbox, msr: u32, sentinel: u64) {
             let baseline = sbox.snapshot().unwrap();
             let original: u64 = match sbox.call("ReadMSR", msr) {
                 Ok(v) => v,
@@ -4869,7 +4869,7 @@ mod tests {
         }
     }
 
-    /// Tests for [`MultiUseSandbox::from_snapshot`] in-memory.
+    /// Tests for [`Sandbox::from_snapshot`] in-memory.
     mod from_snapshot {
         use std::sync::Arc;
 
@@ -4879,15 +4879,15 @@ mod tests {
         use crate::func::Registerable;
         use crate::sandbox::SandboxConfiguration;
         use crate::sandbox::snapshot::Snapshot;
-        use crate::{GuestBinary, HostFunctions, HyperlightError, MultiUseSandbox, SandboxBuilder};
+        use crate::{GuestBinary, HostFunctions, HyperlightError, Sandbox, SandboxBuilder};
 
-        fn make_sandbox() -> MultiUseSandbox {
+        fn make_sandbox() -> Sandbox {
             let path = simple_guest_as_pathbuf();
             SandboxBuilder::from_file(path).build().unwrap()
         }
 
         /// Sandbox with an extra `Add(i32, i32) -> i32` host function.
-        fn make_sandbox_with_add() -> MultiUseSandbox {
+        fn make_sandbox_with_add() -> Sandbox {
             let path = simple_guest_as_pathbuf();
             SandboxBuilder::from_file(path)
                 .host_function("Add", |a: i32, b: i32| a + b)
@@ -4985,12 +4985,9 @@ mod tests {
                 .unwrap();
                 let mut config = SandboxConfiguration::default();
                 config.set_max_guest_log_level(max_level);
-                let mut sbox = MultiUseSandbox::from_snapshot(
-                    Arc::new(snap),
-                    HostFunctions::default(),
-                    Some(config),
-                )
-                .unwrap();
+                let mut sbox =
+                    Sandbox::from_snapshot(Arc::new(snap), HostFunctions::default(), Some(config))
+                        .unwrap();
 
                 // Drop any log records emitted while the guest initialised.
                 LOGGER.clear_log_calls();
@@ -5060,8 +5057,7 @@ mod tests {
                         config
                     });
                     let mut sandbox =
-                        MultiUseSandbox::from_snapshot(snapshot, HostFunctions::default(), config)
-                            .unwrap();
+                        Sandbox::from_snapshot(snapshot, HostFunctions::default(), config).unwrap();
 
                     LOGGER.clear_log_calls();
                     for level in [
@@ -5107,7 +5103,7 @@ mod tests {
             );
         }
 
-        /// A runtime log-level override set on a MultiUseSandbox survives restore.
+        /// A runtime log-level override set on a Sandbox survives restore.
         ///
         /// Ignored because it installs a process-global `log` logger; run
         /// in isolation via the `test-isolated` Justfile recipe.
@@ -5131,7 +5127,7 @@ mod tests {
                 .unwrap();
             sandbox.log_level(LevelFilter::ERROR).unwrap();
 
-            let count_guest_logs = |sandbox: &mut MultiUseSandbox| {
+            let count_guest_logs = |sandbox: &mut Sandbox| {
                 LOGGER.clear_log_calls();
                 for level in [
                     LevelFilter::TRACE,
@@ -5180,7 +5176,7 @@ mod tests {
                 .build()
                 .unwrap();
             let encoded: u64 = GuestLogFilter::Trace.into();
-            let count_guest_logs = |sandbox: &mut MultiUseSandbox| {
+            let count_guest_logs = |sandbox: &mut Sandbox| {
                 LOGGER.clear_log_calls();
                 sandbox
                     .call::<()>("LogMessage", ("hello".to_string(), encoded as i32))
@@ -5214,7 +5210,7 @@ mod tests {
             LOGGER.set_max_level(log::LevelFilter::Trace);
 
             let encoded: u64 = GuestLogFilter::Trace.into();
-            let count_guest_logs = |sandbox: &mut MultiUseSandbox| {
+            let count_guest_logs = |sandbox: &mut Sandbox| {
                 LOGGER.clear_log_calls();
                 sandbox
                     .call::<()>("LogMessage", ("hello".to_string(), encoded as i32))
@@ -5500,7 +5496,7 @@ mod tests {
         }
 
         /// Registering a host function on an already-evolved
-        /// `MultiUseSandbox` must invalidate its cached snapshot, so
+        /// `Sandbox` must invalidate its cached snapshot, so
         /// that the next `snapshot()` reflects the new required
         /// host-function set.
         #[test]

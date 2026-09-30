@@ -25,7 +25,7 @@
 //! 2. **On-demand crash dump** — When the guest's IDT catches the fault
 //!    (e.g., undefined instruction) and reports it back as a `GuestAborted`
 //!    error, the automatic crash dump is not triggered. You can call
-//!    [`MultiUseSandbox::generate_crashdump`] explicitly to capture the
+//!    [`Sandbox::generate_crashdump`] explicitly to capture the
 //!    VM state.
 //!
 //! 3. **Disabling crash dumps per sandbox** — You can opt out of crash dump
@@ -260,7 +260,7 @@ fn guest_crash_with_dump_disabled(_guest_path: &Path) -> hyperlight_host::Result
 
 /// Prints information about the on-demand crash dump API.
 ///
-/// The [`MultiUseSandbox::generate_crashdump`] method captures the current
+/// The [`Sandbox::generate_crashdump`] method captures the current
 /// vCPU state and writes it to an ELF core dump file. This is primarily
 /// useful when attached to a running process via gdb — for example, when a
 /// guest function hangs or takes too long to complete.
@@ -288,7 +288,7 @@ fn guest_crash_with_dump_disabled(_guest_path: &Path) -> hyperlight_host::Result
 fn print_on_demand_info() {
     #[cfg(crashdump)]
     println!(
-        "\nUse MultiUseSandbox::generate_crashdump() from gdb to capture\n\
+        "\nUse Sandbox::generate_crashdump() from gdb to capture\n\
          VM state mid-execution. See docs/how-to-debug-a-hyperlight-guest.md."
     );
 }

@@ -19,7 +19,7 @@ The `LinuxInterruptHandle` uses a packed atomic u8 to track execution state:
 - **tid (AtomicU64)**: Thread ID where the vCPU is running
 - **dropped (AtomicBool)**: Set when the corresponding VM has been dropped
 
-The packed state enables atomic reads of RUNNING_BIT, CANCEL_BIT and DEBUG_INTERRUPT_BIT simultaneously via `get_running_cancel_debug()`. Within a single `VirtualCPU::run()` call, the CANCEL_BIT remains set across vcpu exits and re-entries (such as when calling host functions), ensuring cancellation persists until the guest call completes. However, `clear_cancel()` resets the CANCEL_BIT at the beginning of each new guest function call (specifically in `MultiUseSandbox::call`, before `VirtualCPU::run()` is called), preventing cancellation requests from affecting subsequent guest function calls.
+The packed state enables atomic reads of RUNNING_BIT, CANCEL_BIT and DEBUG_INTERRUPT_BIT simultaneously via `get_running_cancel_debug()`. Within a single `VirtualCPU::run()` call, the CANCEL_BIT remains set across vcpu exits and re-entries (such as when calling host functions), ensuring cancellation persists until the guest call completes. However, `clear_cancel()` resets the CANCEL_BIT at the beginning of each new guest function call (specifically in `Sandbox::call`, before `VirtualCPU::run()` is called), preventing cancellation requests from affecting subsequent guest function calls.
 
 ### Signal Mechanism
 

@@ -20,7 +20,7 @@ use crate::mem::memory_region::{DEFAULT_GUEST_BLOB_MEM_FLAGS, MemoryRegionFlags}
 use crate::mem::mgr::SandboxMemoryManager;
 use crate::mem::shared_mem::{ExclusiveSharedMemory, SharedMemory};
 use crate::sandbox::SandboxConfiguration;
-use crate::{MultiUseSandbox, Result, new_error};
+use crate::{Result, Sandbox, new_error};
 
 #[cfg(any(crashdump, gdb))]
 #[derive(Clone, Debug, Default)]
@@ -51,7 +51,7 @@ pub(crate) struct SandboxRuntimeConfig {
 /// - Configure sandbox settings before VM creation
 ///
 /// The virtual machine is not created until you call [`evolve`](Self::evolve) to transform
-/// this into an initialized [`MultiUseSandbox`].
+/// this into an initialized [`Sandbox`].
 pub struct UninitializedSandbox {
     /// Registered host functions
     pub(crate) host_funcs: Arc<Mutex<FunctionRegistry>>,
@@ -254,9 +254,9 @@ impl UninitializedSandbox {
     ///
     /// This method consumes the `UninitializedSandbox` and performs the final initialization
     /// steps to create the underlying virtual machine. Once evolved, the resulting
-    /// [`MultiUseSandbox`] can execute guest code and handle function calls.
+    /// [`Sandbox`] can execute guest code and handle function calls.
     #[instrument(err(Debug), skip_all, parent = Span::current(), level = "Trace")]
-    pub fn evolve(self) -> Result<MultiUseSandbox> {
+    pub fn evolve(self) -> Result<Sandbox> {
         evolve_impl_multi_use(self)
     }
 
@@ -401,7 +401,7 @@ mod tests {
 
     use crate::sandbox::SandboxConfiguration;
     use crate::sandbox::uninitialized::{GuestBinary, GuestEnvironment};
-    use crate::{MultiUseSandbox, Result, UninitializedSandbox, new_error};
+    use crate::{Result, Sandbox, UninitializedSandbox, new_error};
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -502,7 +502,7 @@ mod tests {
 
             usbox.register("test0", |arg: i32| Ok(arg + 1)).unwrap();
 
-            let sandbox: Result<MultiUseSandbox> = usbox.evolve();
+            let sandbox: Result<Sandbox> = usbox.evolve();
             assert!(sandbox.is_ok());
             let sandbox = sandbox.unwrap();
 
@@ -527,7 +527,7 @@ mod tests {
 
             usbox.register("test1", |a: i32, b: i32| Ok(a + b)).unwrap();
 
-            let sandbox: Result<MultiUseSandbox> = usbox.evolve();
+            let sandbox: Result<Sandbox> = usbox.evolve();
             assert!(sandbox.is_ok());
             let sandbox = sandbox.unwrap();
 
@@ -560,7 +560,7 @@ mod tests {
                 })
                 .unwrap();
 
-            let sandbox: Result<MultiUseSandbox> = usbox.evolve();
+            let sandbox: Result<Sandbox> = usbox.evolve();
             assert!(sandbox.is_ok());
             let sandbox = sandbox.unwrap();
 
@@ -578,7 +578,7 @@ mod tests {
         // calling a function that doesn't exist
         {
             let usbox = uninitialized_sandbox();
-            let sandbox: Result<MultiUseSandbox> = usbox.evolve();
+            let sandbox: Result<Sandbox> = usbox.evolve();
             assert!(sandbox.is_ok());
             let sandbox = sandbox.unwrap();
 
@@ -753,7 +753,7 @@ mod tests {
     #[test]
     fn check_create_and_use_sandbox_on_different_threads() {
         let unintializedsandbox_queue = Arc::new(ArrayQueue::<UninitializedSandbox>::new(10));
-        let sandbox_queue = Arc::new(ArrayQueue::<MultiUseSandbox>::new(10));
+        let sandbox_queue = Arc::new(ArrayQueue::<Sandbox>::new(10));
 
         for i in 0..10 {
             let simple_guest_path = simple_guest_as_pathbuf();
@@ -1094,7 +1094,7 @@ mod tests {
                 );
                 res.unwrap()
             };
-            let _: Result<MultiUseSandbox> = sbox.evolve();
+            let _: Result<Sandbox> = sbox.evolve();
 
             let num_calls = TEST_LOGGER.num_log_calls();
 

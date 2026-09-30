@@ -4,7 +4,7 @@
 //! Functional checks against goldens loaded from the on-disk goldens
 //! directory.
 //!
-//! Each check builds its own `MultiUseSandbox` from the golden with
+//! Each check builds its own `Sandbox` from the golden with
 //! `GoldenTest::load_sandbox`, so checks are independent and one
 //! failure does not poison the next. See `docs/snapshot-versioning.md`
 //! for how to add a check.
@@ -13,7 +13,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use hyperlight_host::sandbox::snapshot::{OciTag, Snapshot};
-use hyperlight_host::{HostFunctions, MultiUseSandbox, SandboxBuilder};
+use hyperlight_host::{HostFunctions, Sandbox, SandboxBuilder};
 
 use crate::fixtures::{CALL_COUNTER_BUMP, HEAP_PATTERN_LEN, register_host_echo_fns};
 
@@ -41,7 +41,7 @@ impl<'a> GoldenTest<'a> {
 
     /// Load the golden into a fresh sandbox with the checks' host
     /// functions registered.
-    pub(crate) fn load_sandbox(&self) -> Result<MultiUseSandbox, String> {
+    pub(crate) fn load_sandbox(&self) -> Result<Sandbox, String> {
         let reference = OciTag::new(self.tag())
             .map_err(|e| format!("invalid golden tag {}: {e}", self.tag()))?;
         let snap = Snapshot::checked_load(self.dir(), reference)

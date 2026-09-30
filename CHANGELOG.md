@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   assembly and extraction without flattening.
 
 ### Changed
+* `Sandbox` is the primary initialized sandbox type. `MultiUseSandbox` remains
+  as a deprecated alias.
 * Support overriding the guest log level when building or restoring initialized
   snapshots.
 * `Snapshot::save` now writes the guest memory blob sparsely, skipping all-zero

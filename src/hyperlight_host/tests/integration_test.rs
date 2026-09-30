@@ -9,7 +9,7 @@ use hyperlight_common::flatbuffer_wrappers::guest_error::ErrorCode;
 use hyperlight_common::func::Bytes;
 use hyperlight_common::log_level::GuestLogFilter;
 use hyperlight_host::sandbox::SandboxConfiguration;
-use hyperlight_host::{HyperlightError, MultiUseSandbox, SandboxBuilder, UninitializedSandbox};
+use hyperlight_host::{HyperlightError, Sandbox, SandboxBuilder, UninitializedSandbox};
 use hyperlight_testing::simplelogger::{LOGGER, SimpleLogger};
 use serial_test::serial;
 use tracing_core::LevelFilter;
@@ -916,7 +916,7 @@ fn c_guest_accesses_byte_chunks() {
 fn interrupt_random_kill_stress_test() {
     // Wrapper to hold a sandbox and its snapshot together
     struct SandboxWithSnapshot {
-        sandbox: MultiUseSandbox,
+        sandbox: Sandbox,
         snapshot: Arc<Snapshot>,
     }
 
@@ -1884,7 +1884,7 @@ fn non_pie_guest_hello_world() {
     let sandbox =
         UninitializedSandbox::new(hyperlight_host::GuestBinary::FilePath(path.into()), None)
             .unwrap();
-    let mut multi_use_sandbox: MultiUseSandbox = sandbox.evolve().unwrap();
+    let mut multi_use_sandbox: Sandbox = sandbox.evolve().unwrap();
     let result: i32 = multi_use_sandbox
         .call("PrintOutput", "Hello from non-PIE guest!\n".to_string())
         .unwrap();

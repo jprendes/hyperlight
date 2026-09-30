@@ -8,11 +8,11 @@ use std::sync::{Mutex, OnceLock};
 use hyperlight_common::flatbuffer_wrappers::guest_error::ErrorCode;
 use hyperlight_host::func::{ParameterValue, ReturnType};
 use hyperlight_host::sandbox::SandboxConfiguration;
-use hyperlight_host::{GuestBinary, HyperlightError, MultiUseSandbox, UninitializedSandbox};
+use hyperlight_host::{GuestBinary, HyperlightError, Sandbox, UninitializedSandbox};
 use hyperlight_testing::simple_guest_for_fuzzing_as_pathbuf;
 use libfuzzer_sys::fuzz_target;
 
-static SANDBOX: OnceLock<Mutex<MultiUseSandbox>> = OnceLock::new();
+static SANDBOX: OnceLock<Mutex<Sandbox>> = OnceLock::new();
 
 // This fuzz target tests all combinations of ReturnType and Parameters for `call_guest_function_by_name`.
 // For fuzzing efficiency, we create one Sandbox and reuse it for all fuzzing iterations.
@@ -28,7 +28,7 @@ fuzz_target!(
             Some(cfg)
         )
         .unwrap();
-        let mu_sbox: MultiUseSandbox = u_sbox.evolve().unwrap();
+        let mu_sbox: Sandbox = u_sbox.evolve().unwrap();
         SANDBOX.set(Mutex::new(mu_sbox)).unwrap();
     },
 

@@ -5,7 +5,7 @@ use hyperlight_host::SandboxBuilder;
 use hyperlight_testing::simple_guest_as_pathbuf;
 
 fn main() {
-    // create a new `MultiUseSandbox` configured to run the `simpleguest.exe`
+    // create a new `Sandbox` configured to run the `simpleguest.exe`
     // test guest binary
     let path = simple_guest_as_pathbuf();
     let mut sbox = SandboxBuilder::from_file(path).build().unwrap();

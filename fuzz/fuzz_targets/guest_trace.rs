@@ -9,12 +9,12 @@ compile_error!("feature `trace` must be enabled to correctly fuzz guest trace fu
 use std::sync::{Mutex, OnceLock};
 
 use hyperlight_host::func::{ParameterValue, ReturnType, ReturnValue};
-use hyperlight_host::{MultiUseSandbox, SandboxBuilder};
+use hyperlight_host::{Sandbox, SandboxBuilder};
 use hyperlight_testing::simple_guest_for_fuzzing_as_pathbuf;
 use libfuzzer_sys::arbitrary::Arbitrary;
 use libfuzzer_sys::{Corpus, fuzz_target};
 
-static SANDBOX: OnceLock<Mutex<MultiUseSandbox>> = OnceLock::new();
+static SANDBOX: OnceLock<Mutex<Sandbox>> = OnceLock::new();
 
 #[derive(Debug)]
 struct FuzzInput {

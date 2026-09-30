@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 
 use hyperlight_host::sandbox::SandboxConfiguration;
-use hyperlight_host::{GuestBinary, MultiUseSandbox, SandboxBuilder, UninitializedSandbox};
+use hyperlight_host::{GuestBinary, Sandbox, SandboxBuilder, UninitializedSandbox};
 use hyperlight_testing::{c_simple_guest_as_pathbuf, simple_guest_as_pathbuf};
 
 /// Returns the path to the Rust simple guest binary.
@@ -21,8 +21,8 @@ fn c_guest_path() -> PathBuf {
 // Rust guest helpers
 // =============================================================================
 
-/// Builds a Rust guest MultiUseSandbox, applying `configure` to the builder.
-pub fn build_rust_sandbox<C>(configure: C) -> MultiUseSandbox
+/// Builds a Rust guest Sandbox, applying `configure` to the builder.
+pub fn build_rust_sandbox<C>(configure: C) -> Sandbox
 where
     C: FnOnce(SandboxBuilder) -> SandboxBuilder,
 {
@@ -31,24 +31,24 @@ where
         .unwrap()
 }
 
-/// Creates a new Rust guest MultiUseSandbox.
-pub fn new_rust_sandbox() -> MultiUseSandbox {
+/// Creates a new Rust guest Sandbox.
+pub fn new_rust_sandbox() -> Sandbox {
     build_rust_sandbox(|builder| builder)
 }
 
-/// Runs a test with a Rust guest MultiUseSandbox.
+/// Runs a test with a Rust guest Sandbox.
 pub fn with_rust_sandbox<F>(f: F)
 where
-    F: FnOnce(MultiUseSandbox),
+    F: FnOnce(Sandbox),
 {
     f(new_rust_sandbox());
 }
 
-/// Runs a test with a Rust guest MultiUseSandbox built with `configure`.
+/// Runs a test with a Rust guest Sandbox built with `configure`.
 pub fn with_rust_sandbox_from<C, F>(configure: C, f: F)
 where
     C: FnOnce(SandboxBuilder) -> SandboxBuilder,
-    F: FnOnce(MultiUseSandbox),
+    F: FnOnce(Sandbox),
 {
     f(build_rust_sandbox(configure));
 }
@@ -75,8 +75,8 @@ where
 // C guest helpers
 // =============================================================================
 
-/// Builds a C guest MultiUseSandbox, applying `configure` to the builder.
-pub fn build_c_sandbox<C>(configure: C) -> MultiUseSandbox
+/// Builds a C guest Sandbox, applying `configure` to the builder.
+pub fn build_c_sandbox<C>(configure: C) -> Sandbox
 where
     C: FnOnce(SandboxBuilder) -> SandboxBuilder,
 {
@@ -85,19 +85,19 @@ where
         .unwrap()
 }
 
-/// Runs a test with a C guest MultiUseSandbox.
+/// Runs a test with a C guest Sandbox.
 pub fn with_c_sandbox<F>(f: F)
 where
-    F: FnOnce(MultiUseSandbox),
+    F: FnOnce(Sandbox),
 {
     f(build_c_sandbox(|builder| builder));
 }
 
-/// Runs a test with a C guest MultiUseSandbox built with `configure`.
+/// Runs a test with a C guest Sandbox built with `configure`.
 pub fn with_c_sandbox_from<C, F>(configure: C, f: F)
 where
     C: FnOnce(SandboxBuilder) -> SandboxBuilder,
-    F: FnOnce(MultiUseSandbox),
+    F: FnOnce(Sandbox),
 {
     f(build_c_sandbox(configure));
 }
@@ -119,10 +119,10 @@ where
     }
 }
 
-/// Runs a test with both Rust and C guest MultiUseSandboxes.
+/// Runs a test with both Rust and C guest Sandboxes.
 pub fn with_all_sandboxes<F>(f: F)
 where
-    F: Fn(MultiUseSandbox),
+    F: Fn(Sandbox),
 {
     with_all_guests(|path| {
         f(SandboxBuilder::from_file(path).build().unwrap());

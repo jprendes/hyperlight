@@ -146,7 +146,7 @@ This custom subscriber stores the spans and events in a buffer initialized only 
 **NOTE**: The spans/events attributes are truncated to fit in the allocated buffer.
 
 The guest log level can be configured when building a sandbox and overridden
-for an initialized sandbox with `MultiUseSandbox::log_level`. The override
+for an initialized sandbox with `Sandbox::log_level`. The override
 applies to later guest calls and is reapplied after snapshot restore.
 
 When the storage space is filled, the guest triggers a VM Exit that sends the guest pointers to the host. The host can access the guest memory, get the data and parse it to create the `spans` and `events` using the `opentelemetry` crate which allows specifying the starting and ending timestamps

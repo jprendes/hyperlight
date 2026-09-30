@@ -189,7 +189,7 @@ pub enum HyperlightError {
     ///
     /// ## Recovery
     ///
-    /// Use [`crate::MultiUseSandbox::restore()`] to recover from a poisoned sandbox.
+    /// Use [`crate::Sandbox::restore()`] to recover from a poisoned sandbox.
     #[error("The sandbox was poisoned")]
     PoisonedSandbox,
 
@@ -312,7 +312,7 @@ impl HyperlightError {
     ///
     /// If this method returns `true`, the sandbox will be poisoned and all further operations
     /// will fail until the sandbox is restored from a non-poisoned snapshot using
-    /// [`crate::MultiUseSandbox::restore()`].
+    /// [`crate::Sandbox::restore()`].
     pub(crate) fn is_poison_error(&self) -> bool {
         // wildcard _ or matches! not used here purposefully to ensure that new error variants
         // are explicitly considered for poisoning behavior.

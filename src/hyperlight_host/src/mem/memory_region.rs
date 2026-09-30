@@ -127,7 +127,7 @@ pub enum MemoryRegionType {
     Scratch,
     /// The snapshot region
     Snapshot,
-    /// An externally-mapped file (via [`MultiUseSandbox::map_file_cow`]).
+    /// An externally-mapped file (via [`Sandbox::map_file_cow`]).
     /// These regions are backed by file handles (Windows) or mmap
     /// (Linux) and are read-only + executable. They are cleaned up
     /// during restore/drop — not part of the guest's own allocator.

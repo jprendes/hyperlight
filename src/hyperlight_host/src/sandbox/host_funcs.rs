@@ -23,7 +23,7 @@ pub struct FunctionRegistry {
 }
 
 /// A collection of host functions that can be supplied to a sandbox
-/// constructor (e.g. [`crate::MultiUseSandbox::from_snapshot`]) to
+/// constructor (e.g. [`crate::Sandbox::from_snapshot`]) to
 /// expose host-side functionality to the guest.
 ///
 /// Use [`HostFunctions::default`] to start with the standard
