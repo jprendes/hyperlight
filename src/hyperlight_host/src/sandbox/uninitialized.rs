@@ -11,7 +11,7 @@ use tracing_core::LevelFilter;
 
 use super::host_funcs::FunctionRegistry;
 use super::snapshot::Snapshot;
-use super::uninitialized_evolve::evolve_impl_multi_use;
+use super::uninitialized_evolve::initialize_sandbox;
 use crate::func::host_functions::{HostFunction, register_host_function};
 use crate::func::{ParameterTuple, SupportedReturnType};
 #[cfg(feature = "build-metadata")]
@@ -257,7 +257,7 @@ impl UninitializedSandbox {
     /// [`Sandbox`] can execute guest code and handle function calls.
     #[instrument(err(Debug), skip_all, parent = Span::current(), level = "Trace")]
     pub fn evolve(self) -> Result<Sandbox> {
-        evolve_impl_multi_use(self)
+        initialize_sandbox(self)
     }
 
     /// Map the contents of a file into the guest at a particular address.

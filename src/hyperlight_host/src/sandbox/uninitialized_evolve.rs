@@ -20,7 +20,7 @@ use crate::signal_handlers::setup_signal_handlers;
 use crate::{Result, Sandbox, UninitializedSandbox};
 
 #[instrument(err(Debug), skip_all, parent = Span::current(), level = "Trace")]
-pub(super) fn evolve_impl_multi_use(u_sbox: UninitializedSandbox) -> Result<Sandbox> {
+pub(super) fn initialize_sandbox(u_sbox: UninitializedSandbox) -> Result<Sandbox> {
     let max_guest_log_level = u_sbox.config.get_max_guest_log_level();
     let (mut hshm, gshm) = u_sbox.mgr.build()?;
 
@@ -164,7 +164,7 @@ pub(crate) fn set_up_hypervisor_partition(
 mod tests {
     use hyperlight_testing::simple_guest_as_pathbuf;
 
-    use super::evolve_impl_multi_use;
+    use super::initialize_sandbox;
     use crate::UninitializedSandbox;
     use crate::sandbox::uninitialized::GuestBinary;
 
@@ -174,7 +174,7 @@ mod tests {
         for guest_bin_path in guest_bin_paths {
             let u_sbox =
                 UninitializedSandbox::new(GuestBinary::FilePath(guest_bin_path), None).unwrap();
-            evolve_impl_multi_use(u_sbox).unwrap();
+            initialize_sandbox(u_sbox).unwrap();
         }
     }
 }

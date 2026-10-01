@@ -7,7 +7,7 @@
 //! - **Prepare** ([`prepare_file_cow`]): performs host-side OS calls
 //!   (open file, create mapping) without requiring a VM.
 //! - **Apply**: performed by the caller (either [`Sandbox::map_file_cow`]
-//!   or [`evolve_impl_multi_use`]) to map the prepared region into
+//!   or [`initialize_sandbox`]) to map the prepared region into
 //!   the guest via [`HyperlightVm::map_region`].
 //!
 //! This separation allows [`UninitializedSandbox`] to accept
