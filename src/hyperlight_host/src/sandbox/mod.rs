@@ -62,18 +62,6 @@ mod tests {
     use crate::sandbox::uninitialized::GuestBinary;
     use crate::{Sandbox, UninitializedSandbox, new_error};
 
-    #[allow(deprecated)]
-    #[test]
-    fn multi_use_sandbox_is_a_sandbox_alias() {
-        fn accepts_sandbox(_: Option<Sandbox>) {}
-
-        let root_alias: Option<crate::MultiUseSandbox> = None;
-        accepts_sandbox(root_alias);
-
-        let module_alias: Option<crate::sandbox::MultiUseSandbox> = None;
-        accepts_sandbox(module_alias);
-    }
-
     #[test]
     fn check_create_and_use_sandbox_on_different_threads() {
         let unintializedsandbox_queue = Arc::new(ArrayQueue::<UninitializedSandbox>::new(10));

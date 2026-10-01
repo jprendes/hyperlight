@@ -20,6 +20,26 @@ use crate::common::{
     with_rust_sandbox, with_rust_sandbox_from, with_rust_uninit_sandbox_cfg,
 };
 
+/// The deprecated sandbox paths stay reachable from outside the crate.
+///
+/// This has to live in an integration test. Paths that resolve inside
+/// `hyperlight_host` prove nothing about what downstream crates can reach.
+#[test]
+#[allow(deprecated)]
+fn deprecated_sandbox_paths_stay_public() {
+    use hyperlight_host::sandbox::initialized_multi_use as legacy;
+
+    fn accepts_sandbox(_: Option<Sandbox>) {}
+    fn accepts_status(_: Option<hyperlight_host::SandboxStatus>) {}
+    fn accepts_finder(_: Option<hyperlight_host::sandbox::PtRootFinder>) {}
+
+    accepts_sandbox(None::<hyperlight_host::MultiUseSandbox>);
+    accepts_sandbox(None::<legacy::MultiUseSandbox>);
+    accepts_sandbox(None::<legacy::Sandbox>);
+    accepts_status(None::<legacy::SandboxStatus>);
+    accepts_finder(None::<legacy::PtRootFinder>);
+}
+
 // A host function cannot be interrupted, but we can at least make sure after requesting to interrupt a host call,
 // we don't re-enter the guest again once the host call is done
 #[test]
