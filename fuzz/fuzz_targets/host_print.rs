@@ -14,10 +14,10 @@ static SANDBOX: OnceLock<Mutex<Sandbox>> = OnceLock::new();
 // For fuzzing efficiency, we create one Sandbox and reuse it for all fuzzing iterations.
 fuzz_target!(
     init: {
-        let mu_sbox = SandboxBuilder::from_file(simple_guest_for_fuzzing_as_pathbuf())
+        let sandbox = SandboxBuilder::from_file(simple_guest_for_fuzzing_as_pathbuf())
             .build()
             .unwrap();
-        SANDBOX.set(Mutex::new(mu_sbox)).unwrap();
+        SANDBOX.set(Mutex::new(sandbox)).unwrap();
     },
 
     |data: String| -> Corpus {

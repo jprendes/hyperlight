@@ -28,8 +28,8 @@ fuzz_target!(
             Some(cfg)
         )
         .unwrap();
-        let mu_sbox: Sandbox = u_sbox.evolve().unwrap();
-        SANDBOX.set(Mutex::new(mu_sbox)).unwrap();
+        let sandbox: Sandbox = u_sbox.evolve().unwrap();
+        SANDBOX.set(Mutex::new(sandbox)).unwrap();
     },
 
     |data: (String, ReturnType, Vec<ParameterValue>)| {

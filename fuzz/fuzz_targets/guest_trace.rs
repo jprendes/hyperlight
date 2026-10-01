@@ -53,11 +53,11 @@ impl<'a> Arbitrary<'a> for FuzzInput {
 // Any unexpected errors from the guest should be reported.
 fuzz_target!(
     init: {
-        let mu_sbox = SandboxBuilder::from_file(simple_guest_for_fuzzing_as_pathbuf())
+        let sandbox = SandboxBuilder::from_file(simple_guest_for_fuzzing_as_pathbuf())
             .build()
             .unwrap();
 
-        SANDBOX.set(Mutex::new(mu_sbox)).unwrap();
+        SANDBOX.set(Mutex::new(sandbox)).unwrap();
     },
 
     |data: FuzzInput| -> Corpus {
