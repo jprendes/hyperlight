@@ -58,6 +58,7 @@ struct Run {
     head_sha: String,
     #[serde(rename = "createdAt")]
     created_at: String,
+    conclusion: String,
 }
 
 /// Run `gh` and hand back its stdout.
@@ -137,6 +138,11 @@ fn artifacts(repo: &str, run: u64) -> Result<Vec<String>> {
 /// most recent runs out of the first replies. Taking one at its word picks a
 /// baseline months older than the one asked for, so ask until two replies
 /// agree on the newest run and keep everything either of them saw.
+///
+/// Asking GitHub to filter is what leaves an answer cold. A listing narrowed
+/// by status came back weeks stale in four of ten tries, and stably enough
+/// that consecutive replies agreed on it, while the same listing unnarrowed
+/// was current every time. Narrow the results here instead.
 fn runs(repo: &str, filter: &[&str]) -> Result<Vec<Run>> {
     let limit = RUNS_SEARCHED.to_string();
     let mut seen: Vec<Run> = Vec::new();
@@ -151,7 +157,7 @@ fn runs(repo: &str, filter: &[&str]) -> Result<Vec<Run>> {
             "--limit",
             &limit,
             "--json",
-            "databaseId,headSha,createdAt",
+            "databaseId,headSha,createdAt,conclusion",
         ];
         args.extend_from_slice(filter);
 
@@ -227,14 +233,49 @@ pub(crate) fn run_commit(repo: &str, run: u64) -> Result<String> {
     Ok(String::from_utf8_lossy(&sha).trim().to_string())
 }
 
-/// Whether `commit` is `ancestor` or was built on top of it.
-fn descends_from(repo: &str, commit: &str, ancestor: &str) -> Result<bool> {
+/// How many commits `commit` sits past `ancestor`, or `None` when it was not
+/// built on top of it.
+fn commits_between(repo: &str, commit: &str, ancestor: &str) -> Result<Option<u64>> {
+    #[derive(Deserialize)]
+    struct Comparison {
+        status: String,
+        ahead_by: u64,
+    }
+
     let path = format!("repos/{repo}/compare/{ancestor}...{commit}");
-    let status = gh(&["api", &path, "--jq", ".status"])?;
-    Ok(matches!(
-        String::from_utf8_lossy(&status).trim(),
-        "identical" | "ahead"
-    ))
+    let comparison: Comparison =
+        serde_json::from_slice(&gh(&["api", &path])?).context("Failed to compare two commits")?;
+
+    Ok(matches!(comparison.status.as_str(), "identical" | "ahead").then_some(comparison.ahead_by))
+}
+
+/// The newest run that measured something `commit` was built on top of, and
+/// how many commits separate the two.
+///
+/// `behind` says how far a run's commit sits before the one asked for, or
+/// `None` when the run measured a different line of development. `kept` says
+/// whether a run still has its artifacts.
+fn baseline(
+    runs: &[Run],
+    behind: impl Fn(&str) -> Result<Option<u64>>,
+    kept: impl Fn(u64) -> Result<bool>,
+) -> Result<Option<(&Run, u64)>> {
+    for run in runs {
+        // A cancelled run leaves some configurations unmeasured.
+        if run.conclusion != "success" {
+            continue;
+        }
+
+        let Some(behind) = behind(&run.head_sha)? else {
+            continue;
+        };
+
+        if kept(run.id)? {
+            return Ok(Some((run, behind)));
+        }
+    }
+
+    Ok(None)
 }
 
 /// The most recent benchmarks of the default branch taken at or before
@@ -245,19 +286,25 @@ fn descends_from(repo: &str, commit: &str, ancestor: &str) -> Result<bool> {
 /// changes the commit never had.
 pub(crate) fn run_at(repo: &str, commit: &str) -> Result<u64> {
     let commit = commit_sha(repo, commit)?;
-    // A cancelled run leaves some configurations unmeasured.
-    let runs = runs(
-        repo,
-        &["--workflow", BASELINE_WORKFLOW, "--status", "success"],
+    let runs = runs(repo, &["--workflow", BASELINE_WORKFLOW])?;
+
+    let found = baseline(
+        &runs,
+        |sha| commits_between(repo, &commit, sha),
+        |id| Ok(!artifacts(repo, id)?.is_empty()),
     )?;
 
-    for run in &runs {
-        if descends_from(repo, &commit, &run.head_sha)? && !artifacts(repo, run.id)?.is_empty() {
-            return Ok(run.id);
-        }
-    }
+    let Some((run, behind)) = found else {
+        bail!("No benchmarks taken at or before {commit} still have their artifacts")
+    };
 
-    bail!("No benchmarks taken at or before {commit} still have their artifacts")
+    // How far back the branch point is says whether the baseline is the one
+    // meant, which a stale listing silently answers wrong.
+    eprintln!(
+        "Taking benchmarks of {}, {behind} commits back",
+        &run.head_sha[..12]
+    );
+    Ok(run.id)
 }
 
 /// Where `pull_request` branched off the branch it targets.
@@ -445,5 +492,64 @@ mod tests {
             repository("hyperlight-dev/hyperlight").unwrap(),
             "hyperlight-dev/hyperlight"
         );
+    }
+
+    /// Newest first, as a listing arrives.
+    fn listing() -> Vec<Run> {
+        ["failure", "success", "success", "success", "success"]
+            .into_iter()
+            .enumerate()
+            .map(|(i, conclusion)| Run {
+                id: 50 - i as u64,
+                head_sha: format!("{:040x}", 50 - i),
+                created_at: format!("2026-10-{:02}T00:00:00Z", 10 - i),
+                conclusion: conclusion.to_string(),
+            })
+            .collect()
+    }
+
+    /// Every run measured the line of development asked about, one commit
+    /// further back each time, and kept its artifacts.
+    fn ancestral(sha: &str) -> Result<Option<u64>> {
+        Ok(Some(
+            50 - u64::from_str_radix(sha.trim_start_matches('0'), 16).unwrap(),
+        ))
+    }
+
+    fn kept(_: u64) -> Result<bool> {
+        Ok(true)
+    }
+
+    #[test]
+    fn passes_over_a_run_that_did_not_finish() {
+        let runs = listing();
+        let (run, behind) = baseline(&runs, ancestral, kept).unwrap().unwrap();
+        assert_eq!(run.id, 49);
+        assert_eq!(behind, 1);
+    }
+
+    #[test]
+    fn passes_over_a_run_that_lost_its_artifacts() {
+        let runs = listing();
+        let (run, _) = baseline(&runs, ancestral, |id| Ok(id < 48))
+            .unwrap()
+            .unwrap();
+        assert_eq!(run.id, 47);
+    }
+
+    #[test]
+    fn passes_over_a_run_of_another_line_of_development() {
+        let runs = listing();
+        let (run, behind) = baseline(&runs, |sha| Ok(ancestral(sha)?.filter(|&n| n > 2)), kept)
+            .unwrap()
+            .unwrap();
+        assert_eq!(run.id, 47);
+        assert_eq!(behind, 3);
+    }
+
+    #[test]
+    fn finds_nothing_to_compare_against() {
+        let runs = listing();
+        assert!(baseline(&runs, |_| Ok(None), kept).unwrap().is_none());
     }
 }
