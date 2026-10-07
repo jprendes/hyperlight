@@ -41,9 +41,11 @@ impl Worktree {
     pub(crate) fn add(commit: &str) -> Result<Self> {
         let path = PathBuf::from(WORKTREE_DIR);
 
-        // A worktree left by an interrupted run holds the path and would
-        // otherwise be reported as already in use.
+        // A worktree left by an interrupted run holds the path, and one whose
+        // directory went with `cargo clean` holds it without being there to
+        // find. Pruning clears both rather than leaving them to accumulate.
         let _ = remove(&path);
+        let _ = git(["worktree", "prune"]);
 
         git(["worktree", "add", "--detach", WORKTREE_DIR, commit])
             .with_context(|| format!("Failed to check out {commit} to compare against"))?;

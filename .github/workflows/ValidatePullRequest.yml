@@ -66,9 +66,9 @@ jobs:
       arch: ${{ matrix.arch }}
       config: ${{ matrix.config }}
 
-  # Guests for the commit the pull request branched from, so the benchmarks
-  # can measure both sides on one machine. Only the configuration the
-  # benchmark suite loads is needed.
+  # Guests for the commit the pull request merges into, so the benchmarks can
+  # measure both sides on one machine. Only the configuration the benchmark
+  # suite loads is needed.
   build-baseline-guests:
     needs: [docs-pr, update-guest-locks]
     # Required because update-guest-locks is skipped on non-dependabot PRs,
@@ -81,8 +81,8 @@ jobs:
       docs_only: ${{ needs.docs-pr.outputs.docs-only }}
       arch: X64
       config: release
-      # The checkout is the merge this run validates, so its first parent
-      # is the commit the pull request branched from.
+      # The checkout is the merge this run validates, so its first parent is
+      # the commit the pull request merges into.
       ref: HEAD^1
       artifact_suffix: -baseline
 
@@ -272,9 +272,9 @@ jobs:
       arch: ${{ matrix.arch }}
       baseline_ref: HEAD^1
 
-  # Report every configuration the run measured against the branch point the
-  # pull request was built from, for the hyperlight-gh-bot to post as a PR
-  # comment. Only runs for PRs (not merge groups) with code changes.
+  # Report every configuration the run measured against the commit the pull
+  # request merges into, for the hyperlight-gh-bot to post as a PR comment.
+  # Only runs for PRs (not merge groups) with code changes.
   benchmark-comment:
     name: post-benchmark-comment
     needs:
@@ -299,8 +299,9 @@ jobs:
         run: |
           echo '## Benchmark Results' > pr-comment.md
           echo '' >> pr-comment.md
-          # No baseline is named: each run measured the branch point alongside
-          # the pull request, so the comparison it carries is the one to read.
+          # No baseline is named: each run measured the commit it merges into
+          # alongside the pull request, so the comparison it carries is the one
+          # to read.
           cargo ci bench-report --config-file bench_report.toml --reproduce \
             --candidate run:${{ github.run_id }} >> pr-comment.md
         env:

@@ -54,7 +54,9 @@ fn merge_output_modes(flags: &[OutputModeFlags]) -> OutputMode {
 #[derive(clap::Args)]
 pub struct BenchArgs {
     /// Pre-built benchmark binary to use (skip build step; can be specified multiple times)
-    #[arg(long)]
+    ///
+    /// One binary holds one commit, so a comparison builds its own.
+    #[arg(long, conflicts_with = "baseline_ref")]
     pub binary: Vec<PathBuf>,
 
     /// Number of benchmarks to run in parallel (0 = all P-cores, default: 0)
@@ -99,7 +101,6 @@ pub struct BenchArgs {
     /// `rust` and one `c` directory.
     #[arg(long, value_name = "DIR")]
     pub baseline_guests: Option<PathBuf>,
-
     /// Name criterion keeps the `--baseline-ref` results under
     #[arg(long, value_name = "NAME", default_value = "base")]
     pub baseline_name: String,
@@ -116,6 +117,15 @@ pub async fn run(mut args: BenchArgs) -> anyhow::Result<()> {
     };
 
     let commit = resolve(&spec, args.repo.as_deref())?;
+
+    // Both passes read the configuration named here, not whatever the commit
+    // they measure happens to carry at the same relative path.
+    if let Some(config_file) = args.config_file.take() {
+        args.config_file = Some(
+            std::path::absolute(&config_file)
+                .with_context(|| format!("Failed to resolve {}", config_file.display()))?,
+        );
+    }
     // Each pass runs from its own checkout, so the directory they write to is
     // named outright rather than found relative to wherever that is.
     let home = std::path::absolute(manifest::criterion_dir())
@@ -123,6 +133,12 @@ pub async fn run(mut args: BenchArgs) -> anyhow::Result<()> {
     std::fs::create_dir_all(&home)
         .with_context(|| format!("Failed to create {}", home.display()))?;
     std::env::set_var("CRITERION_HOME", &home);
+
+    // A baseline left by an earlier run would otherwise stand in for any
+    // benchmark this one cannot measure, which is every benchmark the commit
+    // being measured against never had.
+    clear_baseline(&home, &args.baseline_name)
+        .with_context(|| format!("Failed to clear the {} baseline", args.baseline_name))?;
 
     let guests = args
         .baseline_guests
@@ -143,7 +159,29 @@ pub async fn run(mut args: BenchArgs) -> anyhow::Result<()> {
 
     drop(worktree);
 
-    measure(&args, with(&args, "--baseline")).await
+    measure(&args, with(&args, "--baseline-lenient")).await
+}
+
+/// Drop every saved copy of the baseline `name`, leaving the measurements
+/// beside them alone.
+fn clear_baseline(home: &std::path::Path, name: &str) -> anyhow::Result<()> {
+    if !home.is_dir() {
+        return Ok(());
+    }
+
+    for entry in std::fs::read_dir(home)? {
+        let path = entry?.path();
+        if !path.is_dir() {
+            continue;
+        }
+        if path.file_name().is_some_and(|dir| dir == name) {
+            std::fs::remove_dir_all(&path)
+                .with_context(|| format!("Failed to remove {}", path.display()))?;
+        } else {
+            clear_baseline(&path, name)?;
+        }
+    }
+    Ok(())
 }
 
 /// The commit a baseline names.
@@ -165,6 +203,9 @@ fn resolve(spec: &str, repo: Option<&str>) -> anyhow::Result<String> {
 }
 
 /// The criterion arguments for one pass, naming the baseline it reads or writes.
+///
+/// The comparison is lenient because a commit may add a benchmark the one it
+/// is measured against never had, which strict reading treats as a failure.
 fn with(args: &BenchArgs, flag: &str) -> Vec<String> {
     let mut bench_args = args.bench_args.clone();
     bench_args.push(flag.to_string());
@@ -263,7 +304,34 @@ async fn measure(args: &BenchArgs, bench_args: Vec<String>) -> anyhow::Result<()
 
 #[cfg(test)]
 mod tests {
-    use super::resolve;
+    use super::{clear_baseline, resolve};
+
+    /// Only the baseline being rebuilt goes, so a run holds on to the
+    /// measurements it is not about to replace.
+    #[test]
+    fn clearing_a_baseline_leaves_the_measurements_beside_it() {
+        let home = std::env::temp_dir().join(format!("hl-clear-{}", std::process::id()));
+        let bench = home.join("group").join("case");
+        for set in ["base", "new", "change", "keepsake"] {
+            std::fs::create_dir_all(bench.join(set)).unwrap();
+            std::fs::write(bench.join(set).join("estimates.json"), b"{}").unwrap();
+        }
+
+        clear_baseline(&home, "base").unwrap();
+
+        assert!(!bench.join("base").exists(), "the baseline is rebuilt");
+        assert!(bench.join("new").exists(), "the last run stays");
+        assert!(bench.join("change").exists(), "its comparison stays");
+        assert!(bench.join("keepsake").exists(), "other baselines stay");
+
+        std::fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn clearing_a_baseline_that_was_never_measured_is_no_work() {
+        let home = std::env::temp_dir().join(format!("hl-absent-{}", std::process::id()));
+        assert!(clear_baseline(&home, "base").is_ok());
+    }
 
     /// git already reads branches, tags, shas and the revisions built from
     /// them, so a baseline names one directly.

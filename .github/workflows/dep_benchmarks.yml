@@ -117,8 +117,8 @@ jobs:
 
       # Both commits are measured on this machine, so the comparison reflects
       # them rather than the difference between two runners. `HEAD^1` is the
-      # branch point only because the checkout is the merge this run
-      # validates, so anything else would measure against the wrong commit.
+      # commit the pull request merges into, because the checkout is the merge
+      # this run validates, so anything else would measure the wrong commit.
       - name: Build
         run: just build release
 
@@ -126,7 +126,7 @@ jobs:
         run: |
           if [ -n "${{ inputs.baseline_ref }}" ]; then
             git rev-parse --verify --quiet HEAD^2 >/dev/null || {
-              echo "::error::HEAD is not a merge, so ${{ inputs.baseline_ref }} is not the branch point"
+              echo "::error::HEAD is not a merge, so ${{ inputs.baseline_ref }} is not what it merges into"
               exit 1
             }
             just bench-against ${{ inputs.baseline_ref }} "$RUNNER_TEMP/baseline-guests"
