@@ -37,9 +37,10 @@ jobs:
       arch: arm64
       config: ${{ matrix.config }}
 
-  # Miri on aarch64, which the build-and-test matrix no longer carries.
+  # Miri on aarch64, which the build-and-test matrix no longer carries. It
+  # reads no guest binaries, so it waits for nothing and reports even when the
+  # guests fail to build.
   miri:
-    needs: build-guests
     uses: ./.github/workflows/dep_miri.yml
     secrets: inherit
     with:
