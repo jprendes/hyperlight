@@ -18,7 +18,7 @@ use crate::{manifest, remote};
 const RUN_CACHE: &str = "target/ci-runs";
 
 /// Whose runs a report reads, when nothing else says.
-const DEFAULT_REPO: &str = "hyperlight-dev/hyperlight";
+pub(crate) const DEFAULT_REPO: &str = "hyperlight-dev/hyperlight";
 
 /// Where results come from, either a criterion directory or CI.
 #[derive(Clone)]
@@ -151,8 +151,8 @@ pub struct BenchReportArgs {
     pub candidate: Source,
 
     /// Results to compare against, in the same forms as the candidate. Defaults
-    /// to where a pull request branched, and otherwise to the previous run held
-    /// in the reported directory.
+    /// to the baseline the reported results carry, which a pull request run
+    /// measures alongside them.
     #[arg(long, value_name = "SOURCE")]
     pub baseline: Option<Source>,
 
@@ -218,12 +218,10 @@ pub async fn run(args: BenchReportArgs) -> Result<()> {
 
     let candidate = resolve(&args.candidate, &repo)?;
 
-    // Nothing within a pull request's results says what they mean, so they are
-    // measured against the branch point they were built from.
-    let source = args.baseline.clone().or(match &args.candidate {
-        Source::PullRequest(pull_request) => Some(Source::BaseOf(*pull_request)),
-        _ => None,
-    });
+    // A run measures the commit a pull request branched from alongside the
+    // pull request itself, so its results carry the comparison with them and
+    // a baseline is only read when one is named.
+    let source = args.baseline.clone();
 
     let mut baseline = Origin {
         commit: None,

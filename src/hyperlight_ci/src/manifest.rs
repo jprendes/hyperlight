@@ -44,7 +44,7 @@ pub(crate) struct Host {
 }
 
 /// Where criterion keeps its results.
-fn criterion_dir() -> PathBuf {
+pub(crate) fn criterion_dir() -> PathBuf {
     env::var_os("CRITERION_HOME")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("target").join("criterion"))

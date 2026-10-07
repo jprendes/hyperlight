@@ -10,8 +10,10 @@ use anyhow::Context;
 use criterion_swarm::{CriterionSwarm, OutputMode};
 
 use crate::ballast::Ballast;
+use crate::baseline::Worktree;
+use crate::bench_report::DEFAULT_REPO;
 use crate::config::BenchConfig;
-use crate::manifest;
+use crate::{manifest, remote};
 
 /// An output mode flag for `--build-output` / `--benchmarks-output`.
 #[derive(Clone, Debug)]
@@ -79,12 +81,98 @@ pub struct BenchArgs {
     #[arg(long)]
     pub no_ballast: bool,
 
+    /// Measure this commit first and compare the run against it.
+    ///
+    /// Takes anything git resolves to a commit, a branch, tag or sha, or
+    /// `base-of:<PR>` for where a pull request branched. Both passes run on
+    /// this machine, so the comparison reflects the commits rather than the
+    /// difference between two runners.
+    #[arg(long, value_name = "COMMIT", requires = "baseline_guests")]
+    pub baseline_ref: Option<String>,
+
+    /// Repository a `base-of:<PR>` baseline is read from, `<OWNER>/<NAME>` or
+    /// `remote:<NAME>` for whichever one a git remote points at
+    #[arg(long, value_name = "REPO")]
+    pub repo: Option<String>,
+
+    /// Guest binaries built from `--baseline-ref`, as a directory holding one
+    /// `rust` and one `c` directory.
+    #[arg(long, value_name = "DIR")]
+    pub baseline_guests: Option<PathBuf>,
+
+    /// Name criterion keeps the `--baseline-ref` results under
+    #[arg(long, value_name = "NAME", default_value = "base")]
+    pub baseline_name: String,
+
     /// Additional arguments to forward to criterion benchmarks
     #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub bench_args: Vec<String>,
 }
 
 pub async fn run(mut args: BenchArgs) -> anyhow::Result<()> {
+    let Some(spec) = args.baseline_ref.take() else {
+        let bench_args = std::mem::take(&mut args.bench_args);
+        return measure(&args, bench_args).await;
+    };
+
+    let commit = resolve(&spec, args.repo.as_deref())?;
+    // Each pass runs from its own checkout, so the directory they write to is
+    // named outright rather than found relative to wherever that is.
+    let home = std::path::absolute(manifest::criterion_dir())
+        .context("Failed to resolve where criterion keeps its results")?;
+    std::fs::create_dir_all(&home)
+        .with_context(|| format!("Failed to create {}", home.display()))?;
+    std::env::set_var("CRITERION_HOME", &home);
+
+    let guests = args
+        .baseline_guests
+        .clone()
+        .expect("clap requires guests alongside a baseline commit");
+    let worktree = Worktree::add(&commit)?;
+    worktree.place_guests(&guests)?;
+
+    // A benchmark binary finds its guests relative to the source it was built
+    // from, so the baseline reads the worktree and this tree keeps its own.
+    let here = std::env::current_dir().context("Failed to read the working directory")?;
+    std::env::set_current_dir(worktree.path())
+        .with_context(|| format!("Failed to enter {}", worktree.path().display()))?;
+    let measured = measure(&args, with(&args, "--save-baseline")).await;
+    std::env::set_current_dir(&here)
+        .with_context(|| format!("Failed to return to {}", here.display()))?;
+    measured.with_context(|| format!("Failed to measure {commit}"))?;
+
+    drop(worktree);
+
+    measure(&args, with(&args, "--baseline")).await
+}
+
+/// The commit a baseline names.
+///
+/// `base-of:<PR>` is where a pull request branched, read the way
+/// `bench-report` reads the same spelling. Anything else is left to git, which
+/// already understands branches, tags, shas and the revisions built from them.
+fn resolve(spec: &str, repo: Option<&str>) -> anyhow::Result<String> {
+    let Some(pull_request) = spec.strip_prefix("base-of:") else {
+        return Ok(spec.to_string());
+    };
+
+    let pull_request = pull_request
+        .parse()
+        .map_err(|_| anyhow::anyhow!("`{pull_request}` is not a pull request number"))?;
+    let repo = remote::repository(repo.unwrap_or(DEFAULT_REPO))?;
+
+    remote::merge_base_of(&repo, pull_request)
+}
+
+/// The criterion arguments for one pass, naming the baseline it reads or writes.
+fn with(args: &BenchArgs, flag: &str) -> Vec<String> {
+    let mut bench_args = args.bench_args.clone();
+    bench_args.push(flag.to_string());
+    bench_args.push(args.baseline_name.clone());
+    bench_args
+}
+
+async fn measure(args: &BenchArgs, bench_args: Vec<String>) -> anyhow::Result<()> {
     let config = args
         .config_file
         .as_deref()
@@ -94,37 +182,40 @@ pub async fn run(mut args: BenchArgs) -> anyhow::Result<()> {
     let mut swarm = CriterionSwarm::builder().jobs(args.jobs);
 
     if !args.binary.is_empty() {
-        swarm = swarm.binaries(args.binary);
+        swarm = swarm.binaries(args.binary.clone());
     }
 
     if !args.features.is_empty() {
         swarm = swarm.build_args(["--features".to_string(), args.features.join(",")]);
     }
 
-    for arg in args.bench_args {
+    for arg in bench_args {
         swarm = swarm.bench_arg(arg);
     }
 
-    if args.build_output.is_empty() {
+    let mut build_output = args.build_output.clone();
+    let mut benchmarks_output = args.benchmarks_output.clone();
+
+    if build_output.is_empty() {
         let mode = if std::io::stderr().is_terminal() {
             OutputMode::SPINNER | OutputMode::SUMMARY
         } else {
             OutputMode::STREAM | OutputMode::SUMMARY
         };
-        args.build_output.push(OutputModeFlags(mode));
+        build_output.push(OutputModeFlags(mode));
     }
 
-    if args.benchmarks_output.is_empty() {
+    if benchmarks_output.is_empty() {
         let mode = if std::io::stderr().is_terminal() {
             OutputMode::SPINNER | OutputMode::STREAM | OutputMode::SUMMARY
         } else {
             OutputMode::STREAM | OutputMode::SUMMARY
         };
-        args.benchmarks_output.push(OutputModeFlags(mode));
+        benchmarks_output.push(OutputModeFlags(mode));
     }
 
-    let build_mode = merge_output_modes(&args.build_output);
-    let bench_mode = merge_output_modes(&args.benchmarks_output);
+    let build_mode = merge_output_modes(&build_output);
+    let bench_mode = merge_output_modes(&benchmarks_output);
     swarm = swarm.output(
         criterion_swarm::ProgressReporter::new()
             .build(build_mode)
@@ -168,4 +259,26 @@ pub async fn run(mut args: BenchArgs) -> anyhow::Result<()> {
     result?;
 
     manifest::write(benchmarks).context("Failed to write the benchmark manifest")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::resolve;
+
+    /// git already reads branches, tags, shas and the revisions built from
+    /// them, so a baseline names one directly.
+    #[test]
+    fn a_commit_is_left_to_git() {
+        for spec in ["main", "HEAD^1", "3ee2d4cb", "v1.2.3"] {
+            assert_eq!(resolve(spec, None).unwrap(), spec);
+        }
+    }
+
+    #[test]
+    fn a_pull_request_without_a_number_is_reported() {
+        let error = resolve("base-of:not-a-number", None)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("not a pull request number"), "{error}");
+    }
 }
