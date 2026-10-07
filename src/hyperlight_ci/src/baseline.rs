@@ -47,7 +47,8 @@ impl Worktree {
         let _ = remove(&path);
         let _ = git(["worktree", "prune"]);
 
-        git(["worktree", "add", "--detach", WORKTREE_DIR, commit])
+        let resolved = commit_of(commit)?;
+        git(["worktree", "add", "--detach", WORKTREE_DIR, &resolved])
             .with_context(|| format!("Failed to check out {commit} to compare against"))?;
 
         Ok(Self { path })
@@ -104,6 +105,14 @@ where
     I: IntoIterator<Item = S>,
     S: AsRef<OsStr>,
 {
+    read_git(args).map(|_| ())
+}
+
+fn read_git<I, S>(args: I) -> Result<String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<OsStr>,
+{
     let output = Command::new("git")
         .args(args)
         .output()
@@ -112,7 +121,22 @@ where
     if !output.status.success() {
         bail!("{}", String::from_utf8_lossy(&output.stderr).trim());
     }
-    Ok(())
+    Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+/// The commit a revision names.
+///
+/// `git checkout` and `git diff` read `A...B` as the commit where the two
+/// branched apart. `git worktree add` takes a reference rather than a
+/// revision, so the naming is done here and it is handed a commit.
+pub(crate) fn commit_of(revision: &str) -> Result<String> {
+    if let Some((left, right)) = revision.split_once("...") {
+        return read_git(["merge-base", left, right])
+            .with_context(|| format!("Failed to find where {left} and {right} branched apart"));
+    }
+
+    read_git(["rev-parse", "--verify", &format!("{revision}^{{commit}}")])
+        .with_context(|| format!("Failed to resolve {revision}"))
 }
 
 /// Replace `destination` with the contents of `source`.
@@ -177,6 +201,24 @@ mod tests {
         );
 
         std::fs::remove_dir_all(root).unwrap();
+    }
+
+    /// `A...B` names where two commits branched apart, which is what a pull
+    /// request's validation merge is read with.
+    #[test]
+    fn a_revision_names_one_commit() {
+        let head = commit_of("HEAD").unwrap();
+        assert_eq!(head.len(), 40, "{head}");
+        assert_eq!(commit_of("HEAD^{commit}").unwrap(), head);
+
+        // A merge of a commit with itself branched apart at that commit.
+        assert_eq!(commit_of("HEAD...HEAD").unwrap(), head);
+    }
+
+    #[test]
+    fn a_revision_that_names_nothing_is_reported() {
+        let error = commit_of("not-a-revision").unwrap_err().to_string();
+        assert!(error.contains("not-a-revision"), "{error}");
     }
 
     #[test]

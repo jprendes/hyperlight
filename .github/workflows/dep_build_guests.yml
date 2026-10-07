@@ -61,15 +61,15 @@ jobs:
           # Resolving a revision needs the history it names.
           fetch-depth: ${{ inputs.ref == '' && 1 || 0 }}
 
-      # `HEAD^1` is the commit a pull request merges into: the checkout is the
-      # merge its validation builds, and its first parent is the branch it
-      # targets. On anything but a merge `HEAD^1` is the previous commit, which
-      # would build guests for the wrong one without saying so.
+      # The checkout is the merge a pull request's validation builds, so where
+      # its two parents branched apart is where the pull request did. On
+      # anything but a merge there is no second parent to read, which would
+      # build guests for the wrong commit without saying so.
       - name: Check out the commit to build from
         if: inputs.ref != ''
         run: |
           git rev-parse --verify --quiet HEAD^2 >/dev/null || {
-            echo "::error::HEAD is not a merge, so ${{ inputs.ref }} is not what it merges into"
+            echo "::error::HEAD is not a merge, so ${{ inputs.ref }} is not the branch point"
             exit 1
           }
           git checkout --detach ${{ inputs.ref }}

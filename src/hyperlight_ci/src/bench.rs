@@ -85,10 +85,10 @@ pub struct BenchArgs {
 
     /// Measure this commit first and compare the run against it.
     ///
-    /// Takes anything git resolves to a commit, a branch, tag or sha, or
-    /// `base-of:<PR>` for where a pull request branched. Both passes run on
-    /// this machine, so the comparison reflects the commits rather than the
-    /// difference between two runners.
+    /// Takes anything git resolves to a commit, including `A...B` for where
+    /// two branched apart, or `base-of:<PR>` for where a pull request did.
+    /// Both passes run on this machine, so the comparison reflects the commits
+    /// rather than the difference between two runners.
     #[arg(long, value_name = "COMMIT", requires = "baseline_guests")]
     pub baseline_ref: Option<String>,
 
