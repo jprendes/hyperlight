@@ -113,7 +113,7 @@ pub struct BenchArgs {
 pub async fn run(mut args: BenchArgs) -> anyhow::Result<()> {
     let Some(spec) = args.baseline_ref.take() else {
         let bench_args = std::mem::take(&mut args.bench_args);
-        return measure(&args, bench_args).await;
+        return measure(&args, bench_args, None).await;
     };
 
     let commit = resolve(&spec, args.repo.as_deref())?;
@@ -152,14 +152,20 @@ pub async fn run(mut args: BenchArgs) -> anyhow::Result<()> {
     let here = std::env::current_dir().context("Failed to read the working directory")?;
     std::env::set_current_dir(worktree.path())
         .with_context(|| format!("Failed to enter {}", worktree.path().display()))?;
-    let measured = measure(&args, with(&args, "--save-baseline")).await;
+    let measured = measure(&args, with(&args, "--save-baseline"), None).await;
     std::env::set_current_dir(&here)
         .with_context(|| format!("Failed to return to {}", here.display()))?;
     measured.with_context(|| format!("Failed to measure {commit}"))?;
 
+    let measured_against = worktree.commit().to_string();
     drop(worktree);
 
-    measure(&args, with(&args, "--baseline-lenient")).await
+    measure(
+        &args,
+        with(&args, "--baseline-lenient"),
+        Some(measured_against),
+    )
+    .await
 }
 
 /// Drop every saved copy of the baseline `name`, leaving the measurements
@@ -213,7 +219,11 @@ fn with(args: &BenchArgs, flag: &str) -> Vec<String> {
     bench_args
 }
 
-async fn measure(args: &BenchArgs, bench_args: Vec<String>) -> anyhow::Result<()> {
+async fn measure(
+    args: &BenchArgs,
+    bench_args: Vec<String>,
+    baseline: Option<String>,
+) -> anyhow::Result<()> {
     let config = args
         .config_file
         .as_deref()
@@ -299,7 +309,7 @@ async fn measure(args: &BenchArgs, bench_args: Vec<String>) -> anyhow::Result<()
     drop(ballast);
     result?;
 
-    manifest::write(benchmarks).context("Failed to write the benchmark manifest")
+    manifest::write(benchmarks, baseline).context("Failed to write the benchmark manifest")
 }
 
 #[cfg(test)]

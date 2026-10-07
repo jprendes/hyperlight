@@ -34,6 +34,7 @@ const GUEST_DIRS: [(&str, &str); 2] = [
 /// A checkout of another commit, removed when it goes out of scope.
 pub(crate) struct Worktree {
     path: PathBuf,
+    commit: String,
 }
 
 impl Worktree {
@@ -51,11 +52,19 @@ impl Worktree {
         git(["worktree", "add", "--detach", WORKTREE_DIR, &resolved])
             .with_context(|| format!("Failed to check out {commit} to compare against"))?;
 
-        Ok(Self { path })
+        Ok(Self {
+            path,
+            commit: resolved,
+        })
     }
 
     pub(crate) fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// The commit it holds, as the revision that named it resolved to.
+    pub(crate) fn commit(&self) -> &str {
+        &self.commit
     }
 
     /// Copy the guests of the commit this worktree holds into it.
@@ -228,6 +237,7 @@ mod tests {
 
         let worktree = Worktree {
             path: root.join("worktree"),
+            commit: String::new(),
         };
         let error = worktree.place_guests(&root).unwrap_err().to_string();
 
