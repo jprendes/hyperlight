@@ -180,10 +180,15 @@ fn clear_baseline(home: &std::path::Path, name: &str) -> anyhow::Result<()> {
         if !path.is_dir() {
             continue;
         }
-        if path.file_name().is_some_and(|dir| dir == name) {
+
+        // A benchmark may be grouped under the same name a baseline is saved
+        // under. Measurements tell the two apart: a saved baseline holds them,
+        // a group holds the benchmarks below it.
+        let measured = path.join("estimates.json").is_file();
+        if measured && path.file_name().is_some_and(|dir| dir == name) {
             std::fs::remove_dir_all(&path)
                 .with_context(|| format!("Failed to remove {}", path.display()))?;
-        } else {
+        } else if !measured {
             clear_baseline(&path, name)?;
         }
     }
@@ -333,6 +338,32 @@ mod tests {
         assert!(bench.join("new").exists(), "the last run stays");
         assert!(bench.join("change").exists(), "its comparison stays");
         assert!(bench.join("keepsake").exists(), "other baselines stay");
+
+        std::fs::remove_dir_all(home).unwrap();
+    }
+
+    /// A benchmark may be grouped under the name a baseline is saved under,
+    /// and the group holds every measurement below it.
+    #[test]
+    fn clearing_a_baseline_spares_a_benchmark_of_the_same_name() {
+        let home = std::env::temp_dir().join(format!("hl-group-{}", std::process::id()));
+        let grouped = home.join("base").join("case");
+        for set in ["base", "new"] {
+            std::fs::create_dir_all(grouped.join(set)).unwrap();
+            std::fs::write(grouped.join(set).join("estimates.json"), b"{}").unwrap();
+        }
+
+        clear_baseline(&home, "base").unwrap();
+
+        assert!(
+            home.join("base").is_dir(),
+            "a group named after the baseline is not a saved result"
+        );
+        assert!(grouped.join("new").exists(), "its measurements stay");
+        assert!(
+            !grouped.join("base").exists(),
+            "the baseline saved within it still goes"
+        );
 
         std::fs::remove_dir_all(home).unwrap();
     }
