@@ -65,6 +65,72 @@ pub(super) fn put_blob_if_absent(
     replace_file_atomic(&target, bytes)
 }
 
+pub(super) fn put_immutable_blob(
+    blobs_dir: &Path,
+    digest: &Digest256,
+    bytes: &[u8],
+    verified_file: &std::sync::Mutex<Option<(std::fs::File, std::fs::Metadata)>>,
+) -> crate::Result<()> {
+    let target = blobs_dir.join(&digest.hex);
+    let mut verified = verified_file
+        .lock()
+        .map_err(|_| crate::new_error!("snapshot blob verification cache is poisoned"))?;
+    if let Some((file, metadata)) = verified.as_ref() {
+        let current = file
+            .metadata()
+            .map_err(|e| crate::new_error!("stat cached snapshot blob: {}", e))?;
+        if current.len() != metadata.len()
+            || current.modified().map_err(crate::HyperlightError::from)?
+                != metadata.modified().map_err(crate::HyperlightError::from)?
+        {
+            return Err(crate::new_error!("immutable snapshot blob was modified"));
+        }
+        match std::fs::symlink_metadata(&target) {
+            Ok(target_meta) if target_meta.is_file() => {
+                if same_file_version(&target_meta, metadata) {
+                    return Ok(());
+                }
+                let mut file = open_no_follow(&target)?;
+                verify_blob_file("immutable snapshot", &mut file, &digest.hex)?;
+            }
+            Ok(_) => put_blob_if_absent(blobs_dir, digest, bytes)?,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                put_blob_if_absent(blobs_dir, digest, bytes)?;
+            }
+            Err(error) => {
+                return Err(crate::new_error!("stat immutable snapshot blob: {}", error));
+            }
+        }
+    } else {
+        put_blob_if_absent(blobs_dir, digest, bytes)?;
+    }
+    let file = open_no_follow(&target)?;
+    let metadata = file
+        .metadata()
+        .map_err(|e| crate::new_error!("stat saved snapshot blob: {}", e))?;
+    *verified = Some((file, metadata));
+    Ok(())
+}
+
+fn same_file_version(left: &std::fs::Metadata, right: &std::fs::Metadata) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        left.dev() == right.dev()
+            && left.ino() == right.ino()
+            && left.len() == right.len()
+            && left.mtime() == right.mtime()
+            && left.mtime_nsec() == right.mtime_nsec()
+            && left.ctime() == right.ctime()
+            && left.ctime_nsec() == right.ctime_nsec()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = (left, right);
+        false
+    }
+}
+
 /// Reject a path that is a symbolic link.
 ///
 /// Blobs in an OCI layout are content-addressed regular files. A

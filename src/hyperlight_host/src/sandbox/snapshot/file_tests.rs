@@ -462,6 +462,91 @@ fn save_self_heals_same_length_wrong_content_snapshot_blob() {
 }
 
 #[test]
+#[cfg(unix)]
+fn immutable_save_reuses_hashes_across_saves_and_checked_loads() {
+    let snapshot = create_snapshot();
+    let dir = tempfile::tempdir().unwrap();
+    let tag = OciTag::new("latest").unwrap();
+    snapshot
+        .save_reusing_immutable_blobs(dir.path(), &tag)
+        .unwrap();
+    let blob_len = std::fs::metadata(find_snapshot_blob(dir.path()))
+        .unwrap()
+        .len() as usize;
+
+    let before = super::file::test_hashed_bytes();
+    snapshot
+        .save_reusing_immutable_blobs(dir.path(), &tag)
+        .unwrap();
+    assert!(super::file::test_hashed_bytes() - before < blob_len);
+
+    let loaded = Snapshot::checked_load(dir.path(), tag.clone()).unwrap();
+    let before = super::file::test_hashed_bytes();
+    loaded
+        .save_reusing_immutable_blobs(dir.path(), &tag)
+        .unwrap();
+    assert!(super::file::test_hashed_bytes() - before < blob_len);
+    let loaded = Arc::new(Snapshot::checked_load(dir.path(), tag).unwrap());
+    let mut sandbox = Sandbox::from_snapshot(loaded, HostFunctions::default(), None).unwrap();
+    assert_eq!(sandbox.call::<i32>("GetStatic", ()).unwrap(), 0);
+}
+
+#[test]
+fn immutable_save_revalidates_replaced_files_and_writes_new_destinations() {
+    let snapshot = create_snapshot();
+    let dir = tempfile::tempdir().unwrap();
+    let tag = OciTag::new("latest").unwrap();
+    snapshot
+        .save_reusing_immutable_blobs(dir.path(), &tag)
+        .unwrap();
+    let blob = find_snapshot_blob(dir.path());
+    let replacement = dir.path().join("replacement");
+    std::fs::copy(&blob, &replacement).unwrap();
+    std::fs::rename(replacement, &blob).unwrap();
+    let blob_len = std::fs::metadata(&blob).unwrap().len() as usize;
+    let before = super::file::test_hashed_bytes();
+    snapshot
+        .save_reusing_immutable_blobs(dir.path(), &tag)
+        .unwrap();
+    assert!(super::file::test_hashed_bytes() - before >= blob_len);
+
+    let other = tempfile::tempdir().unwrap();
+    snapshot
+        .save_reusing_immutable_blobs(other.path(), &tag)
+        .unwrap();
+    Snapshot::checked_load(other.path(), tag).unwrap();
+}
+
+#[test]
+fn immutable_save_rejects_modified_cached_files() {
+    use std::io::Write;
+
+    let snapshot = create_snapshot();
+    let dir = tempfile::tempdir().unwrap();
+    let tag = OciTag::new("latest").unwrap();
+    snapshot
+        .save_reusing_immutable_blobs(dir.path(), &tag)
+        .unwrap();
+    let blob = find_snapshot_blob(dir.path());
+    let original_len = std::fs::metadata(&blob).unwrap().len();
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&blob)
+        .unwrap()
+        .write_all(b"modified")
+        .unwrap();
+    assert_eq!(std::fs::metadata(&blob).unwrap().len(), original_len);
+    let error = snapshot
+        .save_reusing_immutable_blobs(dir.path(), &tag)
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("immutable snapshot blob was modified")
+    );
+}
+
+#[test]
 fn snapshot_and_pt_size_round_trip() {
     let snap = create_snapshot();
     let original_snapshot_size = snap.snapshot_memory().gpa_span_len();

@@ -57,6 +57,23 @@ Manifest layers are ordered data, then transport.
 Blob filenames are the sha256 of the blob bytes, so identical blobs
 across tags are stored once.
 
+### Immutable-store save prototype
+
+`Snapshot::save_reusing_immutable_blobs` caches each shared memory layer's
+SHA-256 and retains its verified backing file. On Unix, subsequent saves to
+the same file version skip both memory hashing and existing-file hashing.
+Different destinations and changed file identities are verified before reuse.
+Changing a retained file's length or modification time fails the save.
+`Snapshot::checked_load` seeds these caches during its existing verification;
+unchecked `load` does not. Ordinary `save` still fully hashes and verifies
+memory layers.
+
+This opt-in API requires an exclusively managed immutable blob store outside
+writable guest mounts. Device/inode identity, length and timestamps are a
+reuse check, not protection against hostile host writers or silent corruption.
+Creating or removing hard links changes ctime and may trigger re-verification.
+The persisted OCI format is unchanged.
+
 ## Application metadata
 
 `Snapshot::with_metadata` creates a snapshot that shares the source snapshot's

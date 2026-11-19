@@ -24,7 +24,9 @@ use self::config::{
     Arch, CpuVendor, HostFunction, Hypervisor, MemoryLayout, OciSnapshotConfig, OciSnapshotLayer,
 };
 use self::digest::{Digest256, oci_digest, parse_oci_digest, verify_blob_bytes, verify_blob_file};
-use self::fsutil::{put_blob, put_blob_if_absent, read_bounded, replace_file_atomic};
+use self::fsutil::{
+    put_blob, put_blob_if_absent, put_immutable_blob, read_bounded, replace_file_atomic,
+};
 use self::media_types::{
     ANNOTATION_ARCH, ANNOTATION_CPU, ANNOTATION_HYPERVISOR, ANNOTATION_REF_NAME,
 };
@@ -41,6 +43,11 @@ use crate::mem::memory_region::MemoryRegionFlags;
 use crate::mem::shared_mem::{ReadonlySharedMemory, SharedMemory};
 
 pub(super) const OCI_LAYOUT_VERSION: &str = "1.0.0";
+
+#[cfg(test)]
+pub(super) fn test_hashed_bytes() -> usize {
+    digest::HASHED_BYTES.get()
+}
 
 /// Short golden-tag token for the host CPU vendor, or `None` if the
 /// goldens do not cover it. Exposed for the snapshot golden tests so
@@ -369,8 +376,37 @@ impl Snapshot {
     /// # }
     /// ```
     pub fn save(&self, path: impl AsRef<Path>, tag: &OciTag) -> crate::Result<OciDigest> {
-        let path = path.as_ref();
+        self.save_inner(path.as_ref(), tag, false)
+    }
 
+    /// Save while retaining digests and verified file handles for immutable
+    /// memory layers shared by successive snapshots.
+    ///
+    /// Unlike [`Self::save`], an unchanged, previously verified backing file
+    /// can be reused without hashing its contents again. New files and files
+    /// whose identity or change timestamps differ are verified before reuse.
+    /// Metadata and transport blobs are still written and synced normally.
+    ///
+    /// The caller must exclusively manage the blob store and keep all loaded
+    /// and published memory blobs immutable for the lifetime of these snapshots.
+    /// In particular, do not expose the store through writable guest mounts.
+    /// Cached file metadata is not a defense against a hostile host writer or
+    /// storage corruption that does not change file metadata. Use [`Self::save`]
+    /// when those guarantees are unavailable.
+    pub fn save_reusing_immutable_blobs(
+        &self,
+        path: impl AsRef<Path>,
+        tag: &OciTag,
+    ) -> crate::Result<OciDigest> {
+        self.save_inner(path.as_ref(), tag, true)
+    }
+
+    fn save_inner(
+        &self,
+        path: &Path,
+        tag: &OciTag,
+        reuse_immutable: bool,
+    ) -> crate::Result<OciDigest> {
         // Building the config can reject the snapshot. Do it before
         // writing any file.
         let cfg = self.build_config()?;
@@ -467,7 +503,8 @@ impl Snapshot {
             Vec::new()
         };
 
-        let new_desc = self.write_blobs_and_build_descriptor(path, tag, &cfg, &cfg_bytes)?;
+        let new_desc =
+            self.write_blobs_and_build_descriptor(path, tag, &cfg, &cfg_bytes, reuse_immutable)?;
         let written_digest = OciDigest::from_oci_spec_digest(new_desc.digest());
 
         // Replacement is by tag, not by digest: a new snapshot may
@@ -515,6 +552,7 @@ impl Snapshot {
         tag: &OciTag,
         cfg: &OciSnapshotConfig,
         cfg_bytes: &[u8],
+        reuse_immutable: bool,
     ) -> crate::Result<Descriptor> {
         let blobs_dir = dir.join("blobs").join("sha256");
         std::fs::create_dir_all(&blobs_dir).map_err(|e| {
@@ -527,8 +565,16 @@ impl Snapshot {
             .blobs()
             .map(|blob| {
                 let bytes = blob.memory().as_slice();
-                let digest = Digest256::from_bytes(bytes);
-                put_blob_if_absent(&blobs_dir, &digest, bytes)?;
+                let digest = if reuse_immutable {
+                    let hex = blob.sha256.get_or_init(|| Digest256::from_bytes(bytes).hex);
+                    let digest = Digest256 { hex: hex.clone() };
+                    put_immutable_blob(&blobs_dir, &digest, bytes, &blob.verified_file)?;
+                    digest
+                } else {
+                    let digest = Digest256::from_bytes(bytes);
+                    put_blob_if_absent(&blobs_dir, &digest, bytes)?;
+                    digest
+                };
                 blob_descriptor(MT_SNAPSHOT_CURRENT, &digest, bytes.len())
             })
             .collect::<crate::Result<Vec<_>>>()?;
@@ -1004,15 +1050,28 @@ impl Snapshot {
             .collect::<crate::Result<Vec<_>>>()?;
         let page_tables = blobs[cfg.page_table_layer].clone();
         let data_layers = blobs
-            .into_iter()
+            .iter()
             .filter(|blob| blob.data_len() > 0)
+            .cloned()
             .collect();
         let memory = Arc::new(SnapshotMemory::new(data_layers, page_tables)?);
         // Hash after validating the layers so malformed snapshots fail
         // cheaply.
         if verify_blobs {
-            for (desc, file) in data_descs.iter().zip(&mut snap_files) {
-                verify_blob_file("snapshot", file, &parse_oci_digest(desc.digest())?)?;
+            for ((desc, file), blob) in data_descs.iter().zip(&mut snap_files).zip(&blobs) {
+                let digest = parse_oci_digest(desc.digest())?;
+                verify_blob_file("snapshot", file, &digest)?;
+                blob.sha256.get_or_init(|| digest);
+                let metadata = file
+                    .metadata()
+                    .map_err(|e| crate::new_error!("stat verified snapshot blob: {}", e))?;
+                *blob.verified_file.lock().map_err(|_| {
+                    crate::new_error!("snapshot blob verification cache is poisoned")
+                })? = Some((
+                    file.try_clone()
+                        .map_err(|e| crate::new_error!("retain verified snapshot blob: {}", e))?,
+                    metadata,
+                ));
             }
         }
 
